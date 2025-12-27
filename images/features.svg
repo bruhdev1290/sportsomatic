@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500">
+  <!-- Title -->
+  <text x="400" y="40" font-family="Arial, sans-serif" font-size="28" fill="#2C3E50" font-weight="bold" text-anchor="middle">Sportsomatic Features</text>
+  
+  <!-- Center Icon - Watch -->
+  <g transform="translate(400, 250)">
+    <circle cx="0" cy="0" r="60" fill="#3498DB" stroke="#2980B9" stroke-width="4"/>
+    <circle cx="0" cy="0" r="50" fill="#2C3E50"/>
+    <rect x="-45" y="-70" width="90" height="15" rx="7" fill="#34495E"/>
+    <rect x="-45" y="55" width="90" height="15" rx="7" fill="#34495E"/>
+    <text x="0" y="-8" font-family="Arial, sans-serif" font-size="16" fill="#3498DB" font-weight="bold" text-anchor="middle">SPORTS</text>
+    <text x="0" y="12" font-family="Arial, sans-serif" font-size="16" fill="#3498DB" font-weight="bold" text-anchor="middle">OMATIC</text>
+  </g>
+  
+  <!-- Feature 1: GPS Tracking (Top Left) -->
+  <g transform="translate(120, 100)">
+    <circle cx="0" cy="0" r="45" fill="#27AE60" opacity="0.9"/>
+    <path d="M 0 -20 L 0 20 M -15 0 L 15 0" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="0" cy="0" r="12" fill="none" stroke="#fff" stroke-width="3"/>
+    <circle cx="0" cy="0" r="4" fill="#fff"/>
+    <text x="0" y="70" font-family="Arial, sans-serif" font-size="14" fill="#2C3E50" font-weight="bold" text-anchor="middle">GPS Tracking</text>
+    <text x="0" y="88" font-family="Arial, sans-serif" font-size="11" fill="#7F8C8D" text-anchor="middle">High Accuracy</text>
+  </g>
+  
+  <!-- Feature 2: Running Mode (Top Right) -->
+  <g transform="translate(680, 100)">
+    <circle cx="0" cy="0" r="45" fill="#E74C3C" opacity="0.9"/>
+    <!-- Running icon -->
+    <circle cx="-5" cy="-15" r="6" fill="#fff"/>
+    <path d="M -5 -9 L -5 10" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+    <path d="M -5 0 L -12 15" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+    <path d="M -5 10 L 5 20" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+    <path d="M -5 -3 L 8 5" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+    <text x="0" y="70" font-family="Arial, sans-serif" font-size="14" fill="#2C3E50" font-weight="bold" text-anchor="middle">Running Mode</text>
+    <text x="0" y="88" font-family="Arial, sans-serif" font-size="11" fill="#7F8C8D" text-anchor="middle">Distance • Pace</text>
+  </g>
+  
+  <!-- Feature 3: Swimming Mode (Middle Left) -->
+  <g transform="translate(120, 250)">
+    <circle cx="0" cy="0" r="45" fill="#3498DB" opacity="0.9"/>
+    <!-- Swimming icon -->
+    <circle cx="-15" cy="-5" r="5" fill="#fff"/>
+    <path d="M -10 -5 Q -3 -12, 5 -8 T 18 -5" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <path d="M -5 0 Q 0 -3, 5 0 T 15 0" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <text x="0" y="70" font-family="Arial, sans-serif" font-size="14" fill="#2C3E50" font-weight="bold" text-anchor="middle">Swimming Mode</text>
+    <text x="0" y="88" font-family="Arial, sans-serif" font-size="11" fill="#7F8C8D" text-anchor="middle">Pool Laps</text>
+  </g>
+  
+  <!-- Feature 4: Auto Features (Middle Right) -->
+  <g transform="translate(680, 250)">
+    <circle cx="0" cy="0" r="45" fill="#9B59B6" opacity="0.9"/>
+    <!-- Auto icon (lightning bolt) -->
+    <path d="M 5 -20 L -8 2 L 2 2 L -5 20 L 10 -5 L 0 -5 Z" fill="#fff"/>
+    <text x="0" y="70" font-family="Arial, sans-serif" font-size="14" fill="#2C3E50" font-weight="bold" text-anchor="middle">Auto Features</text>
+    <text x="0" y="88" font-family="Arial, sans-serif" font-size="11" fill="#7F8C8D" text-anchor="middle">Start • Stop • Lap</text>
+  </g>
+  
+  <!-- Feature 5: Heart Rate (Bottom Left) -->
+  <g transform="translate(120, 400)">
+    <circle cx="0" cy="0" r="45" fill="#E91E63" opacity="0.9"/>
+    <!-- Heart icon -->
+    <path d="M 0 10 L -12 -3 Q -15 -10, -8 -12 Q 0 -8, 0 -5 Q 0 -8, 8 -12 Q 15 -10, 12 -3 Z" fill="#fff"/>
+    <text x="0" y="70" font-family="Arial, sans-serif" font-size="14" fill="#2C3E50" font-weight="bold" text-anchor="middle">Heart Rate</text>
+    <text x="0" y="88" font-family="Arial, sans-serif" font-size="11" fill="#7F8C8D" text-anchor="middle">Live Monitoring</text>
+  </g>
+  
+  <!-- Feature 6: Multi-page Views (Bottom Right) -->
+  <g transform="translate(680, 400)">
+    <circle cx="0" cy="0" r="45" fill="#F39C12" opacity="0.9"/>
+    <!-- Pages icon -->
+    <rect x="-12" y="-10" width="20" height="16" rx="2" fill="none" stroke="#fff" stroke-width="2"/>
+    <rect x="-8" y="-6" width="20" height="16" rx="2" fill="none" stroke="#fff" stroke-width="2"/>
+    <rect x="-4" y="-2" width="20" height="16" rx="2" fill="#fff"/>
+    <line x1="0" y1="2" x2="12" y2="2" stroke="#F39C12" stroke-width="1.5"/>
+    <line x1="0" y1="6" x2="12" y2="6" stroke="#F39C12" stroke-width="1.5"/>
+    <line x1="0" y1="10" x2="8" y2="10" stroke="#F39C12" stroke-width="1.5"/>
+    <text x="0" y="70" font-family="Arial, sans-serif" font-size="14" fill="#2C3E50" font-weight="bold" text-anchor="middle">Multi-Page UI</text>
+    <text x="0" y="88" font-family="Arial, sans-serif" font-size="11" fill="#7F8C8D" text-anchor="middle">4 Data Views</text>
+  </g>
+  
+  <!-- Connecting lines -->
+  <line x1="165" y1="120" x2="345" y2="215" stroke="#BDC3C7" stroke-width="2" stroke-dasharray="5,5" opacity="0.5"/>
+  <line x1="635" y1="120" x2="455" y2="215" stroke="#BDC3C7" stroke-width="2" stroke-dasharray="5,5" opacity="0.5"/>
+  <line x1="165" y1="250" x2="340" y2="250" stroke="#BDC3C7" stroke-width="2" stroke-dasharray="5,5" opacity="0.5"/>
+  <line x1="635" y1="250" x2="460" y2="250" stroke="#BDC3C7" stroke-width="2" stroke-dasharray="5,5" opacity="0.5"/>
+  <line x1="165" y1="380" x2="345" y2="285" stroke="#BDC3C7" stroke-width="2" stroke-dasharray="5,5" opacity="0.5"/>
+  <line x1="635" y1="380" x2="455" y2="285" stroke="#BDC3C7" stroke-width="2" stroke-dasharray="5,5" opacity="0.5"/>
+</svg>

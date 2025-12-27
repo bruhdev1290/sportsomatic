@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 400">
+  <defs>
+    <linearGradient id="watchGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#2C3E50;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#34495E;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="phoneGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#3498DB;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2980B9;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Title -->
+  <text x="350" y="30" font-family="Arial, sans-serif" font-size="24" fill="#2C3E50" font-weight="bold" text-anchor="middle">Sportsomatic Architecture</text>
+  
+  <!-- Pebble Watch Section -->
+  <g transform="translate(50, 80)">
+    <rect x="0" y="0" width="250" height="280" rx="10" fill="url(#watchGrad)" stroke="#34495E" stroke-width="2"/>
+    <text x="125" y="30" font-family="Arial, sans-serif" font-size="16" fill="#fff" font-weight="bold" text-anchor="middle">PEBBLE WATCH (C)</text>
+    
+    <!-- UI Layer -->
+    <rect x="15" y="50" width="220" height="50" rx="5" fill="#E74C3C" stroke="#C0392B" stroke-width="2"/>
+    <text x="125" y="72" font-family="Arial, sans-serif" font-size="12" fill="#fff" font-weight="bold" text-anchor="middle">UI Layer</text>
+    <text x="125" y="88" font-family="Arial, sans-serif" font-size="9" fill="#fff" text-anchor="middle">Windows • TextLayers • Menus</text>
+    
+    <!-- State Management -->
+    <rect x="15" y="110" width="220" height="50" rx="5" fill="#9B59B6" stroke="#8E44AD" stroke-width="2"/>
+    <text x="125" y="132" font-family="Arial, sans-serif" font-size="12" fill="#fff" font-weight="bold" text-anchor="middle">State Management</text>
+    <text x="125" y="148" font-family="Arial, sans-serif" font-size="9" fill="#fff" text-anchor="middle">Run/Pause/Stop • Sport Mode</text>
+    
+    <!-- Data Processing -->
+    <rect x="15" y="170" width="220" height="50" rx="5" fill="#16A085" stroke="#138D75" stroke-width="2"/>
+    <text x="125" y="192" font-family="Arial, sans-serif" font-size="12" fill="#fff" font-weight="bold" text-anchor="middle">Data Processing</text>
+    <text x="125" y="208" font-family="Arial, sans-serif" font-size="9" fill="#fff" text-anchor="middle">Distance • Pace • Laps • HR</text>
+    
+    <!-- AppMessage -->
+    <rect x="15" y="230" width="220" height="40" rx="5" fill="#F39C12" stroke="#D68910" stroke-width="2"/>
+    <text x="125" y="252" font-family="Arial, sans-serif" font-size="12" fill="#fff" font-weight="bold" text-anchor="middle">AppMessage API</text>
+    <text x="125" y="264" font-family="Arial, sans-serif" font-size="8" fill="#fff" text-anchor="middle">Bluetooth Communication</text>
+  </g>
+  
+  <!-- Phone Section -->
+  <g transform="translate(400, 80)">
+    <rect x="0" y="0" width="250" height="280" rx="10" fill="url(#phoneGrad)" stroke="#2980B9" stroke-width="2"/>
+    <text x="125" y="30" font-family="Arial, sans-serif" font-size="16" fill="#fff" font-weight="bold" text-anchor="middle">SMARTPHONE (JS)</text>
+    
+    <!-- Pebble.js Layer -->
+    <rect x="15" y="50" width="220" height="50" rx="5" fill="#E67E22" stroke="#D35400" stroke-width="2"/>
+    <text x="125" y="72" font-family="Arial, sans-serif" font-size="12" fill="#fff" font-weight="bold" text-anchor="middle">Pebble.js Runtime</text>
+    <text x="125" y="88" font-family="Arial, sans-serif" font-size="9" fill="#fff" text-anchor="middle">Event Handlers • Messaging</text>
+    
+    <!-- GPS Service -->
+    <rect x="15" y="110" width="220" height="50" rx="5" fill="#27AE60" stroke="#229954" stroke-width="2"/>
+    <text x="125" y="132" font-family="Arial, sans-serif" font-size="12" fill="#fff" font-weight="bold" text-anchor="middle">GPS Service</text>
+    <text x="125" y="148" font-family="Arial, sans-serif" font-size="9" fill="#fff" text-anchor="middle">watchPosition • Coordinates</text>
+    
+    <!-- Data Formatter -->
+    <rect x="15" y="170" width="220" height="50" rx="5" fill="#8E44AD" stroke="#7D3C98" stroke-width="2"/>
+    <text x="125" y="192" font-family="Arial, sans-serif" font-size="12" fill="#fff" font-weight="bold" text-anchor="middle">Data Formatter</text>
+    <text x="125" y="208" font-family="Arial, sans-serif" font-size="9" fill="#fff" text-anchor="middle">Throttle • Package • Send</text>
+    
+    <!-- Native APIs -->
+    <rect x="15" y="230" width="220" height="40" rx="5" fill="#2ECC71" stroke="#27AE60" stroke-width="2"/>
+    <text x="125" y="252" font-family="Arial, sans-serif" font-size="12" fill="#fff" font-weight="bold" text-anchor="middle">Native APIs</text>
+    <text x="125" y="264" font-family="Arial, sans-serif" font-size="8" fill="#fff" text-anchor="middle">Geolocation • Sensors</text>
+  </g>
+  
+  <!-- Communication Arrows -->
+  <g>
+    <!-- Watch to Phone -->
+    <path d="M 300 180 L 400 180" stroke="#E74C3C" stroke-width="3" fill="none" marker-end="url(#arrowRed)"/>
+    <text x="350" y="170" font-family="Arial, sans-serif" font-size="10" fill="#E74C3C" font-weight="bold" text-anchor="middle">Commands</text>
+    
+    <!-- Phone to Watch -->
+    <path d="M 400 220 L 300 220" stroke="#27AE60" stroke-width="3" fill="none" marker-end="url(#arrowGreen)"/>
+    <text x="350" y="240" font-family="Arial, sans-serif" font-size="10" fill="#27AE60" font-weight="bold" text-anchor="middle">GPS Data</text>
+    
+    <!-- Bidirectional Settings -->
+    <path d="M 310 260 L 390 260" stroke="#F39C12" stroke-width="2" fill="none" stroke-dasharray="5,5"/>
+    <path d="M 390 270 L 310 270" stroke="#F39C12" stroke-width="2" fill="none" stroke-dasharray="5,5"/>
+    <text x="350" y="290" font-family="Arial, sans-serif" font-size="10" fill="#F39C12" font-weight="bold" text-anchor="middle">Settings</text>
+  </g>
+  
+  <!-- Arrow markers -->
+  <defs>
+    <marker id="arrowRed" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#E74C3C" />
+    </marker>
+    <marker id="arrowGreen" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#27AE60" />
+    </marker>
+  </defs>
+</svg>
