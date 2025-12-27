@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 168">
+  <!-- Pebble watch face outline -->
+  <rect x="12" y="0" width="120" height="168" rx="15" fill="#000"/>
+  <rect x="16" y="20" width="112" height="128" fill="#111"/>
+  
+  <!-- Title bar -->
+  <text x="72" y="40" font-family="Arial, sans-serif" font-size="10" fill="#FFD700" font-weight="bold" text-anchor="middle">RUN - Main</text>
+  
+  <!-- Divider -->
+  <line x1="16" y1="44" x2="128" y2="44" stroke="#444" stroke-width="1"/>
+  
+  <!-- Main time display card with active state -->
+  <rect x="20" y="50" width="104" height="40" rx="4" fill="none" stroke="#0096FF" stroke-width="2"/>
+  <text x="72" y="75" font-family="Arial, sans-serif" font-size="24" fill="#fff" font-weight="bold" text-anchor="middle">15:42</text>
+  
+  <!-- Distance card -->
+  <rect x="20" y="95" width="104" height="22" rx="4" fill="none" stroke="#FFD700" stroke-width="2"/>
+  <text x="72" y="110" font-family="Arial, sans-serif" font-size="12" fill="#FFD700" font-weight="bold" text-anchor="middle">3.24 km</text>
+  
+  <!-- Pace card -->
+  <rect x="20" y="120" width="104" height="22" rx="10" fill="none" stroke="#4CAF50" stroke-width="2"/>
+  <text x="72" y="135" font-family="Arial, sans-serif" font-size="10" fill="#4CAF50" font-weight="bold" text-anchor="middle">4:51 /km</text>
+  
+  <!-- Footer text showing GPS status -->
+  <text x="72" y="156" font-family="Arial, sans-serif" font-size="7" fill="#4CAF50" text-anchor="middle">gps_on</text>
+  
+  <!-- Page dots - Main page active -->
+  <circle cx="58" cy="162" r="2" fill="#fff"/>
+  <circle cx="68" cy="162" r="2" fill="#666"/>
+  <circle cx="78" cy="162" r="2" fill="#666"/>
+  <circle cx="88" cy="162" r="2" fill="#666"/>
+  
+  <!-- Hardware buttons -->
+  <rect x="0" y="40" width="12" height="15" rx="2" fill="#333"/>
+  <rect x="0" y="75" width="12" height="15" rx="2" fill="#333"/>
+  <rect x="0" y="110" width="12" height="15" rx="2" fill="#333"/>
+  <rect x="132" y="75" width="12" height="15" rx="2" fill="#333"/>
+  
+  <!-- Running indicator (pulsing effect suggestion) -->
+  <circle cx="125" cy="28" r="3" fill="#4CAF50" opacity="0.8"/>
+</svg>
