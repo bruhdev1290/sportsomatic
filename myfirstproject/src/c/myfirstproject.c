@@ -557,17 +557,25 @@ static void prv_select_click_handler(ClickRecognizerRef recognizer, void *contex
   }
 }
 
+static void prv_select_long_click_handler(ClickRecognizerRef recognizer, void *context) {
+  if (s_state == RUN_STATE_RUNNING) {
+    text_layer_set_text(s_footer_layer, "Pause to change mode");
+    return;
+  }
+  prv_show_sport_selector();
+}
+
 static void prv_up_click_handler(ClickRecognizerRef recognizer, void *context) {
+  if (s_sport == SPORT_SWIM) {
+    text_layer_set_text(s_footer_layer, "Swim laps are automatic");
+    return;
+  }
   prv_add_lap();
   prv_update_layers();
 }
 
 static void prv_down_click_handler(ClickRecognizerRef recognizer, void *context) {
   if (s_sport == SPORT_SWIM) {
-    if (s_state == RUN_STATE_RUNNING) {
-      text_layer_set_text(s_footer_layer, "Pause for details");
-      return;
-    }
     s_page = (s_page == PAGE_MAIN) ? PAGE_LAP : PAGE_MAIN;
     prv_update_layers();
   } else {
@@ -578,6 +586,7 @@ static void prv_down_click_handler(ClickRecognizerRef recognizer, void *context)
 
 static void prv_click_config_provider(void *context) {
   window_single_click_subscribe(BUTTON_ID_SELECT, prv_select_click_handler);
+  window_long_click_subscribe(BUTTON_ID_SELECT, 700, prv_select_long_click_handler, NULL);
   window_single_click_subscribe(BUTTON_ID_UP, prv_up_click_handler);
   window_single_click_subscribe(BUTTON_ID_DOWN, prv_down_click_handler);
   window_single_click_subscribe(BUTTON_ID_BACK, prv_back_single_click_handler);
@@ -812,7 +821,7 @@ static void prv_window_load(Window *window) {
   text_layer_set_text_color(s_footer_layer, GColorWhite);
   text_layer_set_font(s_footer_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
   text_layer_set_text_alignment(s_footer_layer, GTextAlignmentLeft);
-  text_layer_set_text(s_footer_layer, "");
+  text_layer_set_text(s_footer_layer, "Hold SELECT to change mode");
   layer_add_child(window_layer, text_layer_get_layer(s_footer_layer));
 
   s_dots_layer = layer_create(GRect(0, bounds.size.h - 10, bounds.size.w, 10));
@@ -866,8 +875,8 @@ static void prv_sport_window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   GRect b = layer_get_bounds(root);
   s_menu_layer = menu_layer_create(b);
-  menu_layer_set_normal_colors(s_menu_layer, GColorBlack, GColorWhite);
-  menu_layer_set_highlight_colors(s_menu_layer, GColorBlack, GColorJaegerGreen);
+  menu_layer_set_normal_colors(s_menu_layer, GColorWhite, GColorBlack);
+  menu_layer_set_highlight_colors(s_menu_layer, GColorBlack, GColorWhite);
   MenuLayerCallbacks cbs = {
     .get_num_sections = prv_menu_get_num_sections,
     .get_num_rows = prv_menu_get_num_rows,
@@ -887,7 +896,7 @@ static void prv_sport_window_unload(Window *window) {
 static void prv_show_sport_selector(void) {
   if (s_sport_window) return;
   s_sport_window = window_create();
-  window_set_background_color(s_sport_window, GColorBlack);
+  window_set_background_color(s_sport_window, GColorWhite);
   window_set_window_handlers(s_sport_window, (WindowHandlers){
     .load = prv_sport_window_load,
     .unload = prv_sport_window_unload,

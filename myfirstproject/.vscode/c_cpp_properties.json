@@ -5,7 +5,11 @@
       "includePath": [
         "${workspaceFolder}/src/c/**",
         "${workspaceFolder}/build/include",
-        "${workspaceFolder}/build/src",
+        "${workspaceFolder}/build/aplite",
+        "${workspaceFolder}/build/basalt",
+        "${workspaceFolder}/build/chalk",
+        "${workspaceFolder}/build/diorite",
+        "${workspaceFolder}/build/emery",
         "/home/vscode/.pebble-sdk/SDKs/current/sdk-core/pebble/basalt/include",
         "/home/vscode/.pebble-sdk/SDKs/current/sdk-core/pebble/common/include"
       ],
