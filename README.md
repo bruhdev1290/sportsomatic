@@ -115,6 +115,8 @@ Download the latest `.pbw` file from the [Releases](https://github.com/bruhdev12
 
 ### Controls
 
+![Button Controls](images/button-controls.svg)
+
 | Button | Action | Long Press |
 |--------|--------|------------|
 | **SELECT** | Start/Pause/Resume | Change sport mode |
