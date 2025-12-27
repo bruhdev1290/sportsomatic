@@ -1,5 +1,5 @@
 {
-  "name": "Ubuntu",
+  "name": "Sportsomatic Pebble Dev Environment",
   "image": "mcr.microsoft.com/devcontainers/base:noble",
   "features": {
     "ghcr.io/devcontainers/features/node:1": {},
@@ -26,12 +26,12 @@
     },
     "codespaces": {
       "openFiles": [
-        "src/c/myfirstproject.c"
+        "sportsomatic/src/c/myfirstproject.c"
       ]
     }
   },
 
-  "workspaceFolder": "/workspaces/codespaces-pebble/myfirstproject",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}/sportsomatic",
   "containerEnv": {
     "LOCALWORKSPACEFOLDERBASENAME": "${localWorkspaceFolderBasename}",
     "LOCALWORKSPACEFOLDER": "${localWorkspaceFolder}",

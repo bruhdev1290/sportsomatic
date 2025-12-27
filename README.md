@@ -2,6 +2,8 @@
 
 A comprehensive fitness tracking app for Pebble smartwatches that supports both running and swimming activities with GPS tracking and real-time statistics.
 
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/bruhdev1290/sportsomatic?quickstart=1)
+
 ![Sportsomatic Logo](images/sportsomatic-banner.svg)
 
 ## Features
@@ -72,6 +74,23 @@ The app uses a two-part architecture:
 - **Phone-side (JavaScript)**: Manages GPS tracking and forwards location data to the watch via Bluetooth
 
 ## Installation
+
+### Quick Start with GitHub Codespaces (Recommended) 🚀
+
+The fastest way to get started is using GitHub Codespaces with our pre-configured development environment:
+
+1. Click the **"Open in GitHub Codespaces"** badge at the top of this README
+2. Wait for the container to build (2-3 minutes on first launch)
+3. The Pebble SDK, emulator, and all dependencies will be automatically installed
+4. Start building: `pebble build`
+5. Test on emulator: `pebble install --emulator basalt`
+
+The devcontainer includes:
+- ✅ Pebble SDK (latest version)
+- ✅ Pebble emulator with SDL support
+- ✅ Python and Node.js
+- ✅ VS Code extensions for Pebble development
+- ✅ All required build tools
 
 ### Prerequisites
 - [Pebble SDK 3.0+](https://developer.rebble.io/developer.pebble.com/sdk/index.html)
