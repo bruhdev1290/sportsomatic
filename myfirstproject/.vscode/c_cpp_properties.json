@@ -1,0 +1,21 @@
+{
+  "configurations": [
+    {
+      "name": "Pebble",
+      "includePath": [
+        "${workspaceFolder}/src/c/**",
+        "${workspaceFolder}/build/include",
+        "${workspaceFolder}/build/src",
+        "/home/vscode/.pebble-sdk/SDKs/current/sdk-core/pebble/basalt/include",
+        "/home/vscode/.pebble-sdk/SDKs/current/sdk-core/pebble/common/include"
+      ],
+      "defines": [
+        "PBL_PLATFORM_BASALT"
+      ],
+      "compilerPath": "/home/vscode/.pebble-sdk/SDKs/4.9.77/toolchain/arm-none-eabi/bin/arm-none-eabi-gcc",
+      "cStandard": "c99",
+      "intelliSenseMode": "gcc-arm"
+    }
+  ],
+  "version": 4
+}

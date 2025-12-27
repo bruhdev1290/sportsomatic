@@ -21,7 +21,24 @@
       "watchface": false
     },
     "messageKeys": [
-      "dummy"
+      "KEY_CMD",
+      "KEY_LAT",
+      "KEY_LON",
+      "KEY_SPEED",
+      "KEY_ACCURACY",
+      "KEY_DISTANCE",
+      "KEY_TIMESTAMP",
+      "KEY_STATUS",
+      "KEY_ERROR",
+      "KEY_UNITS",
+      "KEY_SUMMARY",
+      "KEY_AUTO_LAP_ENABLED",
+      "KEY_AUTO_LAP_DIST",
+      "KEY_AUTO_RUN",
+      "KEY_AUTO_STOP",
+      "KEY_DISTANCE_ALERTS",
+      "KEY_SPORT",
+      "KEY_POOL_LENGTH"
     ],
     "resources": {
       "media": []
