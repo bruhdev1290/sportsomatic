@@ -7,7 +7,7 @@
   "dependencies": {},
   "pebble": {
     "displayName": "sportsomatic",
-    "uuid": "00000000-0000-0000-0000-000000000001",
+    "uuid": "0d52105b-52a8-43d1-a2b7-73c640a0e1e6",
     "sdkVersion": "3",
     "enableMultiJS": true,
     "targetPlatforms": [
