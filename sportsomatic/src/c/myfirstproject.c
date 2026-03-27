@@ -34,6 +34,13 @@ typedef enum {
   ANIM_STATE_SLIDING_RIGHT
 } AnimState;
 
+// UI state colors based on run state
+typedef enum {
+  UI_STATE_RUNNING,
+  UI_STATE_PAUSED,
+  UI_STATE_FINISHED
+} UIStateColor;
+
 typedef enum {
   CMD_START = 1,
   CMD_PAUSE = 2,
@@ -74,9 +81,15 @@ static bool s_confirm_result = false;
 static bool s_confirm_active = false;
 
 // Animation state
-// static PropertyAnimation *s_page_anim = NULL;  // Reserved for future animations
 static AnimState s_anim_state = ANIM_STATE_NONE;
 static Page s_target_page = PAGE_MAIN;
+
+// Lap flash effect
+static bool s_lap_flash_active = false;
+static AppTimer *s_lap_flash_timer = NULL;
+
+// Current UI color state
+static UIStateColor s_ui_state_color = UI_STATE_RUNNING;
 
 // Message handling state
 // static bool s_js_ready = false;  // Reserved for future use
@@ -133,11 +146,89 @@ static void prv_show_confirmation(const char *title, const char *message, void (
 static void prv_animate_page_transition(Page new_page, bool slide_left);
 static void prv_end_run(void);
 static void prv_end_run_confirmed(bool confirmed);
+static void prv_trigger_lap_flash(void);
+static void prv_update_ui_state_color(void);
+static GColor prv_get_state_color(void);
+static GColor prv_get_state_color_dim(void);
 
 // Pebble libc lacks __errno symbol required by libm; provide a stub.
 static int s_errno_stub = 0;
 int *__errno(void) {
   return &s_errno_stub;
+}
+
+// ==================== Lap Flash Animation ====================
+
+static void prv_lap_flash_timer_cb(void *data) {
+  (void)data;
+  s_lap_flash_active = false;
+  s_lap_flash_timer = NULL;
+  prv_update_layers();
+}
+
+static void prv_trigger_lap_flash(void) {
+  s_lap_flash_active = true;
+  if (s_lap_flash_timer) {
+    app_timer_cancel(s_lap_flash_timer);
+  }
+  s_lap_flash_timer = app_timer_register(300, prv_lap_flash_timer_cb, NULL);
+  prv_update_layers();
+}
+
+// ==================== State-Based Colors ====================
+
+static void prv_update_ui_state_color(void) {
+  UIStateColor new_state;
+  switch (s_state) {
+    case RUN_STATE_PAUSED:
+      new_state = UI_STATE_PAUSED;
+      break;
+    case RUN_STATE_SUMMARY:
+      new_state = UI_STATE_FINISHED;
+      break;
+    case RUN_STATE_RUNNING:
+    case RUN_STATE_IDLE:
+    default:
+      new_state = UI_STATE_RUNNING;
+      break;
+  }
+  if (new_state != s_ui_state_color) {
+    s_ui_state_color = new_state;
+    prv_mark_chrome_dirty();
+  }
+}
+
+static GColor prv_get_state_color(void) {
+#ifdef PBL_COLOR
+  switch (s_ui_state_color) {
+    case UI_STATE_PAUSED:
+      return GColorChromeYellow;  // Yellow for paused
+    case UI_STATE_FINISHED:
+      return GColorVividCerulean; // Blue for finished
+    case UI_STATE_RUNNING:
+    default:
+      return GColorJaegerGreen;   // Green for running
+  }
+#else
+  // On B&W, use white for all states
+  return GColorWhite;
+#endif
+}
+
+static GColor prv_get_state_color_dim(void) {
+#ifdef PBL_COLOR
+  switch (s_ui_state_color) {
+    case UI_STATE_PAUSED:
+      return GColorYellow;
+    case UI_STATE_FINISHED:
+      return GColorBlue;
+    case UI_STATE_RUNNING:
+    default:
+      return GColorGreen;
+  }
+#else
+  return GColorWhite;
+#endif
 }
 
 // ==================== Animation Helpers ====================
@@ -189,53 +280,58 @@ static void prv_animate_page_transition(Page new_page, bool slide_left) {
 #endif
 
 // ==================== Platform-Specific Layout ====================
+// BIG NUMBERS DESIGN: Massive time, minimal everything else
 // Pebble 2 (Diorite): 144x168, B&W, HR sensor
 // Time 2 (Emery): 200x228, Color, HR sensor (larger screen)
 
 #if defined(PBL_PLATFORM_EMERY)
-  // Emery has larger screen - use bigger fonts and more spacing
+  // Time 2 - huge screen, use biggest fonts
+  #define LAYOUT_PADDING 12
+  #define LAYOUT_TITLE_Y 2
+  #define LAYOUT_PRIMARY_Y 28
+  #define LAYOUT_SECONDARY_Y 96
+  #define LAYOUT_TERTIARY_Y 134
+  #define LAYOUT_FOOTER_Y 188
+  #define FONT_PRIMARY FONT_KEY_ROBOTO_BOLD_SUBSET_49
+  #define FONT_SECONDARY FONT_KEY_GOTHIC_24_BOLD
+  #define FONT_TERTIARY FONT_KEY_GOTHIC_18_BOLD
+  #define CARD_RADIUS 0
+#elif defined(PBL_PLATFORM_DIORITE)
+  // Pebble 2 - 144x168, maximize the time display
+  #define LAYOUT_PADDING 4
+  #define LAYOUT_TITLE_Y 0
+  #define LAYOUT_PRIMARY_Y 20
+  #define LAYOUT_SECONDARY_Y 78
+  #define LAYOUT_TERTIARY_Y 108
+  #define LAYOUT_FOOTER_Y 146
+  #define FONT_PRIMARY FONT_KEY_BITHAM_42_BOLD
+  #define FONT_SECONDARY FONT_KEY_GOTHIC_18_BOLD
+  #define FONT_TERTIARY FONT_KEY_GOTHIC_14
+  #define CARD_RADIUS 0
+#elif defined(PBL_PLATFORM_CHALK)
+  // Round display - center everything
   #define LAYOUT_PADDING 16
   #define LAYOUT_TITLE_Y 4
   #define LAYOUT_PRIMARY_Y 32
-  #define LAYOUT_SECONDARY_Y 94
-  #define LAYOUT_TERTIARY_Y 124
-  #define LAYOUT_FOOTER_Y 182
+  #define LAYOUT_SECONDARY_Y 100
+  #define LAYOUT_TERTIARY_Y 138
+  #define LAYOUT_FOOTER_Y 188
   #define FONT_PRIMARY FONT_KEY_ROBOTO_BOLD_SUBSET_49
-  #define FONT_SECONDARY FONT_KEY_GOTHIC_28_BOLD
-  #define CARD_RADIUS 6
-#elif defined(PBL_PLATFORM_DIORITE)
-  // Pebble 2 - standard size, need to fit in 144x168
+  #define FONT_SECONDARY FONT_KEY_GOTHIC_24_BOLD
+  #define FONT_TERTIARY FONT_KEY_GOTHIC_18_BOLD
+  #define CARD_RADIUS 0
+#else
+  // Basalt and others
   #define LAYOUT_PADDING 6
-  #define LAYOUT_TITLE_Y 2
-  #define LAYOUT_PRIMARY_Y 26
-  #define LAYOUT_SECONDARY_Y 80
-  #define LAYOUT_TERTIARY_Y 108
+  #define LAYOUT_TITLE_Y 0
+  #define LAYOUT_PRIMARY_Y 22
+  #define LAYOUT_SECONDARY_Y 84
+  #define LAYOUT_TERTIARY_Y 114
   #define LAYOUT_FOOTER_Y 150
   #define FONT_PRIMARY FONT_KEY_BITHAM_42_BOLD
-  #define FONT_SECONDARY FONT_KEY_GOTHIC_24_BOLD
-  #define CARD_RADIUS 4
-#elif defined(PBL_PLATFORM_CHALK)
-  // Round display
-  #define LAYOUT_PADDING 18
-  #define LAYOUT_TITLE_Y 4
-  #define LAYOUT_PRIMARY_Y 32
-  #define LAYOUT_SECONDARY_Y 94
-  #define LAYOUT_TERTIARY_Y 124
-  #define LAYOUT_FOOTER_Y 182
-  #define FONT_PRIMARY FONT_KEY_ROBOTO_BOLD_SUBSET_49
-  #define FONT_SECONDARY FONT_KEY_GOTHIC_28_BOLD
-  #define CARD_RADIUS 6
-#else
-  // Basalt and others - default
-  #define LAYOUT_PADDING 8
-  #define LAYOUT_TITLE_Y 2
-  #define LAYOUT_PRIMARY_Y 28
-  #define LAYOUT_SECONDARY_Y 88
-  #define LAYOUT_TERTIARY_Y 116
-  #define LAYOUT_FOOTER_Y 154
-  #define FONT_PRIMARY FONT_KEY_BITHAM_42_BOLD
-  #define FONT_SECONDARY FONT_KEY_GOTHIC_24_BOLD
-  #define CARD_RADIUS 4
+  #define FONT_SECONDARY FONT_KEY_GOTHIC_18_BOLD
+  #define FONT_TERTIARY FONT_KEY_GOTHIC_14
+  #define CARD_RADIUS 0
 #endif
 
 static int64_t prv_now_ms(void) {
@@ -421,10 +517,43 @@ static void prv_mark_chrome_dirty(void) {
 }
 
 static void prv_update_layers(void) {
+  // Handle text colors during lap flash
+  if (s_lap_flash_active) {
+#ifdef PBL_COLOR
+    text_layer_set_text_color(s_primary_layer, GColorBlack);
+    text_layer_set_text_color(s_secondary_layer, GColorBlack);
+    text_layer_set_text_color(s_tertiary_layer, GColorBlack);
+    text_layer_set_text_color(s_title_layer, GColorBlack);
+#else
+    text_layer_set_text_color(s_primary_layer, GColorBlack);
+    text_layer_set_text_color(s_secondary_layer, GColorBlack);
+    text_layer_set_text_color(s_tertiary_layer, GColorBlack);
+    text_layer_set_text_color(s_title_layer, GColorBlack);
+#endif
+  } else {
+    // Normal text colors
+#ifdef PBL_COLOR
+    text_layer_set_text_color(s_primary_layer, COLOR_TEXT_PRIMARY);
+    text_layer_set_text_color(s_secondary_layer, COLOR_SECONDARY);
+    text_layer_set_text_color(s_tertiary_layer, COLOR_TERTIARY);
+    text_layer_set_text_color(s_title_layer, COLOR_SECONDARY);
+#else
+    text_layer_set_text_color(s_primary_layer, GColorWhite);
+    text_layer_set_text_color(s_secondary_layer, GColorWhite);
+    text_layer_set_text_color(s_tertiary_layer, GColorWhite);
+    text_layer_set_text_color(s_title_layer, GColorWhite);
+#endif
+  }
+
   const char *page_label = prv_page_label(s_page);
   switch (s_state) {
     case RUN_STATE_RUNNING:
-      snprintf(s_buf_title, sizeof(s_buf_title), "%s - %s", s_sport == SPORT_SWIM ? "SWIM" : "RUN", page_label);
+      if (s_sport == SPORT_SWIM) {
+        // Show lap count in title for swim mode
+        snprintf(s_buf_title, sizeof(s_buf_title), "SWIM %d - %s", s_lap_count, page_label);
+      } else {
+        snprintf(s_buf_title, sizeof(s_buf_title), "RUN - %s", page_label);
+      }
       break;
     case RUN_STATE_PAUSED:
       snprintf(s_buf_title, sizeof(s_buf_title), "PAUSED - %s", page_label);
@@ -433,7 +562,7 @@ static void prv_update_layers(void) {
       snprintf(s_buf_title, sizeof(s_buf_title), "SUMMARY");
       break;
     default:
-      snprintf(s_buf_title, sizeof(s_buf_title), "READY");
+      snprintf(s_buf_title, sizeof(s_buf_title), "%s", s_sport == SPORT_SWIM ? "SWIM" : "RUN");
       break;
   }
   text_layer_set_text(s_title_layer, s_buf_title);
@@ -444,32 +573,31 @@ static void prv_update_layers(void) {
   if (s_sport == SPORT_SWIM) {
     // Two pages only: Main and Details (use PAGE_LAP slot)
     if (s_page == PAGE_MAIN) {
-      // Main: Total time, distance (m/yd), lap count
+      // Main: Total time prominently, with lap count as secondary focus
       prv_format_time_ms(s_elapsed_ms, s_buf_primary, sizeof(s_buf_primary));
+      // Show lap count more prominently when swimming
+      if (s_lap_count == 0) {
+        snprintf(s_buf_secondary, sizeof(s_buf_secondary), "Ready to swim");
+      } else if (s_lap_count == 1) {
+        snprintf(s_buf_secondary, sizeof(s_buf_secondary), "1 lap completed");
+      } else {
+        snprintf(s_buf_secondary, sizeof(s_buf_secondary), "%d laps completed", s_lap_count);
+      }
+      // Distance in pool-appropriate units
       if (s_use_metric) {
         int m = (int)(s_distance_m + 0.5);
-        snprintf(s_buf_secondary, sizeof(s_buf_secondary), "%d m  Laps %d", m, s_lap_count);
+        snprintf(s_buf_tertiary, sizeof(s_buf_tertiary), "%d m", m);
       } else {
         int yd = (int)((s_distance_m / 0.9144) + 0.5);
-        snprintf(s_buf_secondary, sizeof(s_buf_secondary), "%d yd  Laps %d", yd, s_lap_count);
+        snprintf(s_buf_tertiary, sizeof(s_buf_tertiary), "%d yd", yd);
       }
-      // Show heart rate if available on tertiary line
-#ifdef PBL_HEALTH
-      if (s_heart_rate_bpm > 0) {
-        snprintf(s_buf_tertiary, sizeof(s_buf_tertiary), "HR %ld bpm", (long)s_heart_rate_bpm);
-      } else {
-        snprintf(s_buf_tertiary, sizeof(s_buf_tertiary), "HR -- bpm");
-      }
-#else
-      snprintf(s_buf_tertiary, sizeof(s_buf_tertiary), "HR -- bpm");
-#endif
-    } else { // Details
+    } else { // Details (Lap page for swim)
       // Show last lap time and pace per 100m/yd
       if (s_lap_count > 0) {
         Lap last = s_laps[s_lap_count - 1];
         prv_format_time_ms(last.elapsed_ms, s_buf_primary, sizeof(s_buf_primary));
         // Pace per 100m/yd
-        double segment = s_use_metric ? 100.0 : 91.44; // 100m or 100yd (approx)
+        double segment = s_use_metric ? 100.0 : 91.44;
         if (last.distance_m > 0.0 && last.elapsed_ms > 0) {
           double pace_sec = ((double)last.elapsed_ms / 1000.0) / (last.distance_m / segment);
           int total_sec = (int)pace_sec;
@@ -479,19 +607,19 @@ static void prv_update_layers(void) {
         } else {
           snprintf(s_buf_tertiary, sizeof(s_buf_tertiary), "--:--");
         }
-        // Pool length info
+        // Lap count in secondary (more useful than pool length here)
+        snprintf(s_buf_secondary, sizeof(s_buf_secondary), "Lap %d of %d", s_lap_count, s_lap_count);
+      } else {
+        // Empty state: show pool length prominently, encouraging message
         if (s_use_metric) {
           int m = (int)((s_pool_length_cm + 50) / 100);
-          snprintf(s_buf_secondary, sizeof(s_buf_secondary), "Pool %dm", m);
+          snprintf(s_buf_primary, sizeof(s_buf_primary), "%d m", m);
         } else {
-          // 1 yd = 91.44 cm
           int yd = (int)((s_pool_length_cm / 91.44) + 0.5);
-          snprintf(s_buf_secondary, sizeof(s_buf_secondary), "Pool %dyd", yd);
+          snprintf(s_buf_primary, sizeof(s_buf_primary), "%d yd", yd);
         }
-      } else {
-        snprintf(s_buf_primary, sizeof(s_buf_primary), "No laps");
-        snprintf(s_buf_secondary, sizeof(s_buf_secondary), "--");
-        snprintf(s_buf_tertiary, sizeof(s_buf_tertiary), "--");
+        snprintf(s_buf_secondary, sizeof(s_buf_secondary), "Pool length");
+        snprintf(s_buf_tertiary, sizeof(s_buf_tertiary), "Press UP for lap");
       }
     }
   } else {
@@ -536,9 +664,10 @@ static void prv_update_layers(void) {
           snprintf(s_buf_secondary, sizeof(s_buf_secondary), "Lap %d", s_lap_count);
           prv_format_unit_distance_2dp(last.distance_m, s_buf_tertiary, sizeof(s_buf_tertiary));
         } else {
-          snprintf(s_buf_primary, sizeof(s_buf_primary), "No laps");
-          snprintf(s_buf_secondary, sizeof(s_buf_secondary), "--");
-          snprintf(s_buf_tertiary, sizeof(s_buf_tertiary), "--");
+          // Better empty state for splits page
+          snprintf(s_buf_primary, sizeof(s_buf_primary), "Ready");
+          snprintf(s_buf_secondary, sizeof(s_buf_secondary), "No splits yet");
+          snprintf(s_buf_tertiary, sizeof(s_buf_tertiary), "UP to mark lap");
         }
         break;
       default:
@@ -598,7 +727,8 @@ static void prv_add_lap(void) {
   s_lap_anchor_ms = s_elapsed_ms;
   s_lap_anchor_distance_m = s_distance_m;
   
-  // Lap feedback - distinct pattern
+  // Lap feedback - flash + vibration
+  prv_trigger_lap_flash();
   vibes_short_pulse();
   text_layer_set_text(s_footer_layer, "Lap marked!");
 }
@@ -647,6 +777,7 @@ static void prv_start_run(void) {
   s_lap_anchor_ms = 0;
   s_lap_anchor_distance_m = 0;
   prv_send_cmd(CMD_START);
+  prv_update_ui_state_color();
   prv_update_layers();
   
   // Success feedback
@@ -662,6 +793,7 @@ static void prv_pause_run(void) {
   s_state = RUN_STATE_PAUSED;
   s_pause_started_ms = prv_now_ms();
   prv_send_cmd(CMD_PAUSE);
+  prv_update_ui_state_color();
   prv_update_layers();
   
   // Pause feedback - double short pulse
@@ -678,6 +810,7 @@ static void prv_resume_run(void) {
   s_last_tick_ms = now;
   s_state = RUN_STATE_RUNNING;
   prv_send_cmd(CMD_RESUME);
+  prv_update_ui_state_color();
   prv_update_layers();
   
   // Resume feedback
@@ -903,105 +1036,79 @@ static void prv_outbox_sent(DictionaryIterator *iter, void *context) {
 }
 
 static void prv_draw_divider(Layer *layer, GContext *ctx) {
-#ifdef PBL_COLOR
-  graphics_context_set_stroke_color(ctx, GColorDarkGray);
-#else
-  graphics_context_set_stroke_color(ctx, GColorWhite);
-#endif
-  graphics_context_set_stroke_width(ctx, 1);
-  GRect b = layer_get_bounds(layer);
-  graphics_draw_line(ctx, GPoint(0, 0), GPoint(b.size.w, 0));
-  
-  // Add subtle shadow effect on color platforms
-#ifdef PBL_COLOR
-  graphics_context_set_stroke_color(ctx, GColorBlack);
-  graphics_draw_line(ctx, GPoint(0, 1), GPoint(b.size.w, 1));
-#endif
+  // BIG NUMBERS: No divider needed, keeping function for compatibility
+  (void)ctx;
+  (void)layer;
 }
 
 static void prv_draw_dots(Layer *layer, GContext *ctx) {
+  // BIG NUMBERS: Minimal dots - just small squares with state color
   GRect b = layer_get_bounds(layer);
   int count = (s_sport == SPORT_SWIM) ? 2 : PAGE_COUNT;
-  int16_t spacing = 14;
-  int16_t radius_active = 4;
-  int16_t radius_inactive = 3;
+  int16_t spacing = 10;
+  int16_t size = 3; // small squares
   int total = (count - 1) * spacing;
   int16_t start_x = (b.size.w - total) / 2;
-  int16_t y = b.size.h / 2;
+  int16_t y = b.size.h / 2 - size / 2;
   
   for (int i = 0; i < count; i++) {
-    int16_t x = start_x + i * spacing;
+    int16_t x = start_x + i * spacing - size / 2;
     bool is_active = (i == s_page);
-    int16_t radius = is_active ? radius_active : radius_inactive;
+    
+    GRect dot_rect = GRect(x, y, size, size);
     
 #ifdef PBL_COLOR
     if (is_active) {
-      // Active dot with glow effect
-      graphics_context_set_fill_color(ctx, COLOR_PRIMARY);
-      graphics_fill_circle(ctx, GPoint(x, y), radius + 1);
-      graphics_context_set_fill_color(ctx, GColorWhite);
-      graphics_fill_circle(ctx, GPoint(x, y), radius);
+      graphics_context_set_fill_color(ctx, prv_get_state_color());
+      graphics_fill_rect(ctx, dot_rect, 0, GCornerNone);
     } else {
       graphics_context_set_fill_color(ctx, GColorDarkGray);
-      graphics_fill_circle(ctx, GPoint(x, y), radius);
+      graphics_fill_rect(ctx, dot_rect, 0, GCornerNone);
     }
 #else
-    graphics_context_set_fill_color(ctx, is_active ? GColorWhite : GColorDarkGray);
-    graphics_fill_circle(ctx, GPoint(x, y), radius);
-    // White border for active on B&W
     if (is_active) {
+      graphics_context_set_fill_color(ctx, GColorWhite);
+      graphics_fill_rect(ctx, dot_rect, 0, GCornerNone);
+    } else {
+      // Inactive barely visible on B&W
       graphics_context_set_stroke_color(ctx, GColorWhite);
-      graphics_draw_circle(ctx, GPoint(x, y), radius + 1);
+      graphics_context_set_stroke_width(ctx, 1);
+      graphics_draw_rect(ctx, dot_rect);
     }
 #endif
   }
 }
 
 static void prv_draw_bg(Layer *layer, GContext *ctx) {
+  // BIG NUMBERS DESIGN: Clean background with state colors
   GRect b = layer_get_bounds(layer);
-  int16_t pad = PBL_IF_ROUND_ELSE(18, LAYOUT_PADDING);
-  int16_t w = b.size.w - pad * 2;
-
-  // Pebble Design System: Card-based layout with proper spacing
-  // Match positions with text layers
-  // Primary card - largest, contains main metric (time)
-#if defined(PBL_PLATFORM_EMERY) || defined(PBL_PLATFORM_CHALK)
-  GRect r1 = GRect(pad, LAYOUT_PRIMARY_Y, w, 58);
-  GRect r2 = GRect(pad, LAYOUT_SECONDARY_Y, w, 30);
-  GRect r3 = GRect(pad, LAYOUT_TERTIARY_Y, w, 26);
-#else
-  GRect r1 = GRect(pad, LAYOUT_PRIMARY_Y, w, 50);
-  GRect r2 = GRect(pad, LAYOUT_SECONDARY_Y, w, LAYOUT_TERTIARY_Y - LAYOUT_SECONDARY_Y - 2);
-  GRect r3 = GRect(pad, LAYOUT_TERTIARY_Y, w, 24);
-#endif
-
+  
+  // Lap flash effect - invert the screen briefly
+  if (s_lap_flash_active) {
 #ifdef PBL_COLOR
-  // Primary card with subtle fill
-  graphics_context_set_fill_color(ctx, GColorDarkGray);
-  graphics_fill_rect(ctx, r1, CARD_RADIUS, GCornersAll);
-  graphics_context_set_stroke_color(ctx, COLOR_PRIMARY);
-  graphics_context_set_stroke_width(ctx, 2);
-  graphics_draw_round_rect(ctx, r1, CARD_RADIUS);
-
-  // Secondary card
-  graphics_context_set_fill_color(ctx, GColorDarkGray);
-  graphics_fill_rect(ctx, r2, CARD_RADIUS > 2 ? CARD_RADIUS - 1 : 2, GCornersAll);
-  graphics_context_set_stroke_color(ctx, COLOR_SECONDARY);
-  graphics_context_set_stroke_width(ctx, 1);
-  graphics_draw_round_rect(ctx, r2, CARD_RADIUS > 2 ? CARD_RADIUS - 1 : 2);
-
-  // Tertiary pill (fully rounded)
-  graphics_context_set_fill_color(ctx, GColorDarkGray);
-  graphics_fill_rect(ctx, r3, 12, GCornersAll);
-  graphics_context_set_stroke_color(ctx, COLOR_TERTIARY);
-  graphics_draw_round_rect(ctx, r3, 12);
+    graphics_context_set_fill_color(ctx, prv_get_state_color());
+    graphics_fill_rect(ctx, b, 0, GCornerNone);
 #else
-  // Diorite (Pebble 2) B&W: Clean outline style with good contrast
+    // B&W: fill with white
+    graphics_context_set_fill_color(ctx, GColorWhite);
+    graphics_fill_rect(ctx, b, 0, GCornerNone);
+#endif
+    return; // Don't draw anything else during flash
+  }
+  
+  // Subtle separator line under the big time display - uses state color
+  int16_t line_y = LAYOUT_SECONDARY_Y - 6;
+  
+#ifdef PBL_COLOR
+  graphics_context_set_stroke_color(ctx, prv_get_state_color());
+  graphics_context_set_stroke_width(ctx, 2);
+  graphics_draw_line(ctx, GPoint(20, line_y), GPoint(b.size.w - 20, line_y));
+#else
+  // B&W: even more minimal, short centered line
   graphics_context_set_stroke_color(ctx, GColorWhite);
   graphics_context_set_stroke_width(ctx, 1);
-  graphics_draw_round_rect(ctx, r1, CARD_RADIUS);
-  graphics_draw_round_rect(ctx, r2, CARD_RADIUS > 2 ? CARD_RADIUS - 1 : 2);
-  graphics_draw_round_rect(ctx, r3, 10);
+  int16_t center_x = b.size.w / 2;
+  graphics_draw_line(ctx, GPoint(center_x - 25, line_y), GPoint(center_x + 25, line_y));
 #endif
 }
 
@@ -1018,17 +1125,17 @@ static void prv_window_load(Window *window) {
   s_font_primary = fonts_get_system_font(FONT_PRIMARY);
   s_font_secondary = fonts_get_system_font(FONT_SECONDARY);
 
-  // Status bar area with app name/state
-  s_title_layer = text_layer_create(GRect(pad, LAYOUT_TITLE_Y, w, 22));
+  // Title - minimal, small, top-left (or center on round)
+  s_title_layer = text_layer_create(GRect(pad, LAYOUT_TITLE_Y, w, 20));
   text_layer_set_background_color(s_title_layer, GColorClear);
   text_layer_set_text_color(s_title_layer, COLOR_SECONDARY);
-  text_layer_set_font(s_title_layer, s_font_title);
-  text_layer_set_text_alignment(s_title_layer, PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentLeft));
+  text_layer_set_font(s_title_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+  text_layer_set_text_alignment(s_title_layer, PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentCenter));
   text_layer_set_text(s_title_layer, "READY");
   layer_add_child(window_layer, text_layer_get_layer(s_title_layer));
 
-  // Subtle divider
-  s_divider_layer = layer_create(GRect(pad, LAYOUT_TITLE_Y + 22, w, 2));
+  // No divider in Big Numbers design
+  s_divider_layer = layer_create(GRect(0, 0, 0, 0));
   layer_set_update_proc(s_divider_layer, prv_draw_divider);
   layer_add_child(window_layer, s_divider_layer);
 
@@ -1037,23 +1144,21 @@ static void prv_window_load(Window *window) {
   layer_set_update_proc(s_bg_layer, prv_draw_bg);
   layer_add_child(window_layer, s_bg_layer);
 
-  // Primary metric card - Time (largest, most important)
-  // Adjust height based on platform
-#if defined(PBL_PLATFORM_EMERY) || defined(PBL_PLATFORM_CHALK)
-  s_primary_layer = text_layer_create(GRect(pad, LAYOUT_PRIMARY_Y, w, 58));
-#else
-  s_primary_layer = text_layer_create(GRect(pad, LAYOUT_PRIMARY_Y, w, 50));
-#endif
+  // Primary metric - BIG TIME (massive, centered)
+  s_primary_layer = text_layer_create(GRect(pad, LAYOUT_PRIMARY_Y, w, 56));
   text_layer_set_background_color(s_primary_layer, GColorClear);
+#ifdef PBL_COLOR
   text_layer_set_text_color(s_primary_layer, COLOR_TEXT_PRIMARY);
+#else
+  text_layer_set_text_color(s_primary_layer, GColorWhite);
+#endif
   text_layer_set_font(s_primary_layer, s_font_primary);
   text_layer_set_text_alignment(s_primary_layer, GTextAlignmentCenter);
   text_layer_set_text(s_primary_layer, "00:00");
   layer_add_child(window_layer, text_layer_get_layer(s_primary_layer));
 
-  // Secondary metric card - Distance
-  s_secondary_layer = text_layer_create(GRect(pad, LAYOUT_SECONDARY_Y, w, 
-    PBL_IF_ROUND_ELSE(30, (LAYOUT_TERTIARY_Y - LAYOUT_SECONDARY_Y - 2))));
+  // Secondary metric - Distance (smaller, below time)
+  s_secondary_layer = text_layer_create(GRect(pad, LAYOUT_SECONDARY_Y, w, 26));
   text_layer_set_background_color(s_secondary_layer, GColorClear);
   text_layer_set_text_color(s_secondary_layer, COLOR_SECONDARY);
   text_layer_set_font(s_secondary_layer, s_font_secondary);
@@ -1061,34 +1166,26 @@ static void prv_window_load(Window *window) {
   text_layer_set_text(s_secondary_layer, "0.00 km");
   layer_add_child(window_layer, text_layer_get_layer(s_secondary_layer));
 
-  // Tertiary metric card - Pace/HR
-  s_tertiary_layer = text_layer_create(GRect(pad, LAYOUT_TERTIARY_Y, w, 24));
+  // Tertiary metric - Pace/HR (smallest, bottom)
+  s_tertiary_layer = text_layer_create(GRect(pad, LAYOUT_TERTIARY_Y, w, 20));
   text_layer_set_background_color(s_tertiary_layer, GColorClear);
   text_layer_set_text_color(s_tertiary_layer, COLOR_TERTIARY);
-  text_layer_set_font(s_tertiary_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+  text_layer_set_font(s_tertiary_layer, fonts_get_system_font(FONT_TERTIARY));
   text_layer_set_text_alignment(s_tertiary_layer, GTextAlignmentCenter);
   text_layer_set_text(s_tertiary_layer, "--:--");
   layer_add_child(window_layer, text_layer_get_layer(s_tertiary_layer));
 
-  // Footer area for hints/status
-#if defined(PBL_PLATFORM_EMERY) || defined(PBL_PLATFORM_CHALK)
-  s_footer_layer = text_layer_create(GRect(pad, bounds.size.h - 34, w, 22));
-#else
-  s_footer_layer = text_layer_create(GRect(pad, LAYOUT_FOOTER_Y, w, 18));
-#endif
+  // Footer - minimal hints
+  s_footer_layer = text_layer_create(GRect(pad, LAYOUT_FOOTER_Y, w, 16));
   text_layer_set_background_color(s_footer_layer, GColorClear);
   text_layer_set_text_color(s_footer_layer, COLOR_TEXT_SECONDARY);
   text_layer_set_font(s_footer_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
-  text_layer_set_text_alignment(s_footer_layer, GTextAlignmentLeft);
-  text_layer_set_text(s_footer_layer, "Hold SELECT to change mode");
+  text_layer_set_text_alignment(s_footer_layer, GTextAlignmentCenter);
+  text_layer_set_text(s_footer_layer, "");
   layer_add_child(window_layer, text_layer_get_layer(s_footer_layer));
 
-  // Page indicator dots - position above footer
-#if defined(PBL_PLATFORM_EMERY) || defined(PBL_PLATFORM_CHALK)
-  s_dots_layer = layer_create(GRect(0, bounds.size.h - 16, bounds.size.w, 14));
-#else
-  s_dots_layer = layer_create(GRect(0, bounds.size.h - 14, bounds.size.w, 12));
-#endif
+  // Page indicator dots - above footer
+  s_dots_layer = layer_create(GRect(0, LAYOUT_FOOTER_Y - 12, bounds.size.w, 8));
   layer_set_update_proc(s_dots_layer, prv_draw_dots);
   layer_add_child(window_layer, s_dots_layer);
 }
@@ -1256,6 +1353,7 @@ static void prv_end_run_confirmed(bool confirmed) {
   s_state = RUN_STATE_SUMMARY;
   prv_send_cmd(CMD_STOP);
   prv_send_summary();
+  prv_update_ui_state_color();
   prv_update_layers();
   vibes_double_pulse(); // Success feedback
 }
