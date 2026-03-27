@@ -73,13 +73,13 @@ static Layer *s_confirm_bg_layer;
 static bool s_confirm_result = false;
 static bool s_confirm_active = false;
 
-// Animation helpers
-static PropertyAnimation *s_page_anim = NULL;
+// Animation state
+// static PropertyAnimation *s_page_anim = NULL;  // Reserved for future animations
 static AnimState s_anim_state = ANIM_STATE_NONE;
 static Page s_target_page = PAGE_MAIN;
 
-// Inbox ready flag for better message handling
-static bool s_js_ready = false;
+// Message handling state
+// static bool s_js_ready = false;  // Reserved for future use
 
 static GFont s_font_title;
 static GFont s_font_primary;
@@ -123,8 +123,11 @@ static char s_buf_tertiary[32];
 static char s_buf_title[24];
 static char s_buf_footer[48];
 
+static int64_t prv_now_ms(void);
 static void prv_reset_thresholds(void);
+static void prv_mark_chrome_dirty(void);
 static void prv_update_layers(void);
+static void prv_send_summary(void);
 static void prv_show_sport_selector(void);
 static void prv_show_confirmation(const char *title, const char *message, void (*callback)(bool));
 static void prv_animate_page_transition(Page new_page, bool slide_left);
@@ -139,11 +142,7 @@ int *__errno(void) {
 
 // ==================== Animation Helpers ====================
 
-// Animation callbacks for future use with PropertyAnimation
-static void prv_animation_stopped(Animation *anim, bool finished, void *context) {
-  animation_destroy(anim);
-  s_page_anim = NULL;
-}
+// Note: Animation callbacks defined below where needed
 
 static void prv_animate_page_transition(Page new_page, bool slide_left) {
   // For now, simple fade effect by marking layers dirty
@@ -439,7 +438,6 @@ static void prv_update_layers(void) {
   }
   text_layer_set_text(s_title_layer, s_buf_title);
 
-  double unit_distance = s_use_metric ? s_distance_m / 1000.0 : s_distance_m / 1609.34;
   int32_t lap_elapsed_ms = s_elapsed_ms - s_lap_anchor_ms;
   double lap_distance_m = s_distance_m - s_lap_anchor_distance_m;
 
@@ -692,7 +690,6 @@ static void prv_send_summary(void) {
     return;
   }
   char summary[96];
-  double dist_units = s_use_metric ? s_distance_m / 1000.0 : s_distance_m / 1609.34;
   int32_t total_sec = s_elapsed_ms / 1000;
   char dist_str[24];
   prv_format_unit_distance_2dp(s_distance_m, dist_str, sizeof(dist_str));
