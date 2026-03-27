@@ -2,6 +2,11 @@
 #include <math.h>
 #include "message_keys.auto.h"
 
+// Animation duration for smooth transitions (ms)
+#define ANIMATION_DURATION 200
+#define SLIDE_ANIMATION_DURATION 250
+#define FADE_ANIMATION_DURATION 150
+
 typedef enum {
   RUN_STATE_IDLE,
   RUN_STATE_RUNNING,
@@ -21,6 +26,13 @@ typedef enum {
   PAGE_SPLITS,
   PAGE_COUNT
 } Page;
+
+// Animation states for page transitions
+typedef enum {
+  ANIM_STATE_NONE,
+  ANIM_STATE_SLIDING_LEFT,
+  ANIM_STATE_SLIDING_RIGHT
+} AnimState;
 
 typedef enum {
   CMD_START = 1,
@@ -54,6 +66,20 @@ static Layer *s_dots_layer;
 static Layer *s_bg_layer;
 static Window *s_sport_window;
 static MenuLayer *s_menu_layer;
+static Window *s_confirm_window;
+static TextLayer *s_confirm_title_layer;
+static TextLayer *s_confirm_msg_layer;
+static Layer *s_confirm_bg_layer;
+static bool s_confirm_result = false;
+static bool s_confirm_active = false;
+
+// Animation helpers
+static PropertyAnimation *s_page_anim = NULL;
+static AnimState s_anim_state = ANIM_STATE_NONE;
+static Page s_target_page = PAGE_MAIN;
+
+// Inbox ready flag for better message handling
+static bool s_js_ready = false;
 
 static GFont s_font_title;
 static GFont s_font_primary;
@@ -100,12 +126,118 @@ static char s_buf_footer[48];
 static void prv_reset_thresholds(void);
 static void prv_update_layers(void);
 static void prv_show_sport_selector(void);
+static void prv_show_confirmation(const char *title, const char *message, void (*callback)(bool));
+static void prv_animate_page_transition(Page new_page, bool slide_left);
+static void prv_end_run(void);
+static void prv_end_run_confirmed(bool confirmed);
 
 // Pebble libc lacks __errno symbol required by libm; provide a stub.
 static int s_errno_stub = 0;
 int *__errno(void) {
   return &s_errno_stub;
 }
+
+// ==================== Animation Helpers ====================
+
+// Animation callbacks for future use with PropertyAnimation
+static void prv_animation_stopped(Animation *anim, bool finished, void *context) {
+  animation_destroy(anim);
+  s_page_anim = NULL;
+}
+
+static void prv_animate_page_transition(Page new_page, bool slide_left) {
+  // For now, simple fade effect by marking layers dirty
+  // Full slide animation requires more complex multi-layer management
+  // which can be added in a future iteration
+  if (new_page == s_page) return;
+  
+  s_target_page = new_page;
+  s_page = new_page;
+  prv_update_layers();
+  
+  // Visual feedback via dots animation
+  prv_mark_chrome_dirty();
+  
+  // Brief vibration feedback on page change
+  static int64_t last_page_change = 0;
+  int64_t now = prv_now_ms();
+  if (now - last_page_change > 200) { // Debounce
+    vibes_short_pulse();
+    last_page_change = now;
+  }
+}
+
+// ==================== Pebble Design System Colors ====================
+
+#ifdef PBL_COLOR
+  // Primary accent colors per Pebble Design System
+  #define COLOR_PRIMARY GColorVividCerulean
+  #define COLOR_SECONDARY GColorChromeYellow  
+  #define COLOR_TERTIARY GColorJaegerGreen
+  #define COLOR_BG_CARD GColorDarkGray
+  #define COLOR_TEXT_PRIMARY GColorWhite
+  #define COLOR_TEXT_SECONDARY GColorLightGray
+  #define COLOR_STATUS_BAR GColorBlack
+#else
+  // Diorite (Pebble 2) B&W optimized - high contrast
+  #define COLOR_PRIMARY GColorWhite
+  #define COLOR_SECONDARY GColorWhite
+  #define COLOR_TERTIARY GColorWhite
+  #define COLOR_BG_CARD GColorBlack
+  #define COLOR_TEXT_PRIMARY GColorWhite
+  #define COLOR_TEXT_SECONDARY GColorWhite
+  #define COLOR_STATUS_BAR GColorBlack
+#endif
+
+// ==================== Platform-Specific Layout ====================
+// Pebble 2 (Diorite): 144x168, B&W, HR sensor
+// Time 2 (Emery): 200x228, Color, HR sensor (larger screen)
+
+#if defined(PBL_PLATFORM_EMERY)
+  // Emery has larger screen - use bigger fonts and more spacing
+  #define LAYOUT_PADDING 16
+  #define LAYOUT_TITLE_Y 4
+  #define LAYOUT_PRIMARY_Y 32
+  #define LAYOUT_SECONDARY_Y 94
+  #define LAYOUT_TERTIARY_Y 124
+  #define LAYOUT_FOOTER_Y 182
+  #define FONT_PRIMARY FONT_KEY_ROBOTO_BOLD_SUBSET_49
+  #define FONT_SECONDARY FONT_KEY_GOTHIC_28_BOLD
+  #define CARD_RADIUS 6
+#elif defined(PBL_PLATFORM_DIORITE)
+  // Pebble 2 - standard size, need to fit in 144x168
+  #define LAYOUT_PADDING 6
+  #define LAYOUT_TITLE_Y 2
+  #define LAYOUT_PRIMARY_Y 26
+  #define LAYOUT_SECONDARY_Y 80
+  #define LAYOUT_TERTIARY_Y 108
+  #define LAYOUT_FOOTER_Y 150
+  #define FONT_PRIMARY FONT_KEY_BITHAM_42_BOLD
+  #define FONT_SECONDARY FONT_KEY_GOTHIC_24_BOLD
+  #define CARD_RADIUS 4
+#elif defined(PBL_PLATFORM_CHALK)
+  // Round display
+  #define LAYOUT_PADDING 18
+  #define LAYOUT_TITLE_Y 4
+  #define LAYOUT_PRIMARY_Y 32
+  #define LAYOUT_SECONDARY_Y 94
+  #define LAYOUT_TERTIARY_Y 124
+  #define LAYOUT_FOOTER_Y 182
+  #define FONT_PRIMARY FONT_KEY_ROBOTO_BOLD_SUBSET_49
+  #define FONT_SECONDARY FONT_KEY_GOTHIC_28_BOLD
+  #define CARD_RADIUS 6
+#else
+  // Basalt and others - default
+  #define LAYOUT_PADDING 8
+  #define LAYOUT_TITLE_Y 2
+  #define LAYOUT_PRIMARY_Y 28
+  #define LAYOUT_SECONDARY_Y 88
+  #define LAYOUT_TERTIARY_Y 116
+  #define LAYOUT_FOOTER_Y 154
+  #define FONT_PRIMARY FONT_KEY_BITHAM_42_BOLD
+  #define FONT_SECONDARY FONT_KEY_GOTHIC_24_BOLD
+  #define CARD_RADIUS 4
+#endif
 
 static int64_t prv_now_ms(void) {
   time_t sec;
@@ -377,9 +509,27 @@ static void prv_update_layers(void) {
         prv_format_pace(lap_distance_m, lap_elapsed_ms, s_buf_tertiary, sizeof(s_buf_tertiary));
         break;
       case PAGE_HR:
-        snprintf(s_buf_primary, sizeof(s_buf_primary), "HR n/a");
-        snprintf(s_buf_secondary, sizeof(s_buf_secondary), "--");
-        snprintf(s_buf_tertiary, sizeof(s_buf_tertiary), "--");
+        // Enhanced HR display for Pebble 2 and Time 2 (both have HR sensors)
+        {
+          int32_t hr = s_heart_rate_bpm;
+          if (hr > 0) {
+            snprintf(s_buf_primary, sizeof(s_buf_primary), "%ld", (long)hr);
+            snprintf(s_buf_secondary, sizeof(s_buf_secondary), "bpm");
+            
+            // Simple HR zone indication based on common max HR formula (220 - age, assuming ~30yo => ~190 max)
+            const char *zone;
+            if (hr < 114) zone = "Recovery";
+            else if (hr < 133) zone = "Fat Burn";
+            else if (hr < 152) zone = "Cardio";
+            else if (hr < 171) zone = "Peak";
+            else zone = "Max";
+            snprintf(s_buf_tertiary, sizeof(s_buf_tertiary), "%s", zone);
+          } else {
+            snprintf(s_buf_primary, sizeof(s_buf_primary), "--");
+            snprintf(s_buf_secondary, sizeof(s_buf_secondary), "bpm");
+            snprintf(s_buf_tertiary, sizeof(s_buf_tertiary), "No HR signal");
+          }
+        }
         break;
       case PAGE_SPLITS:
         if (s_lap_count > 0) {
@@ -401,6 +551,12 @@ static void prv_update_layers(void) {
   text_layer_set_text(s_primary_layer, s_buf_primary);
   text_layer_set_text(s_secondary_layer, s_buf_secondary);
   text_layer_set_text(s_tertiary_layer, s_buf_tertiary);
+  
+  // Update footer hint based on state
+  if (s_state == RUN_STATE_SUMMARY) {
+    text_layer_set_text(s_footer_layer, "SELECT: New workout");
+  }
+  
   prv_mark_chrome_dirty();
 }
 
@@ -443,7 +599,10 @@ static void prv_add_lap(void) {
   }
   s_lap_anchor_ms = s_elapsed_ms;
   s_lap_anchor_distance_m = s_distance_m;
+  
+  // Lap feedback - distinct pattern
   vibes_short_pulse();
+  text_layer_set_text(s_footer_layer, "Lap marked!");
 }
 
 static void prv_update_elapsed(void) {
@@ -457,14 +616,19 @@ static void prv_update_elapsed(void) {
   s_last_tick_ms = now;
 }
 
-static void prv_end_run(void);
-
 static void prv_tick_handler(struct tm *tick_time, TimeUnits units_changed) {
   prv_update_elapsed();
   if (s_state == RUN_STATE_RUNNING && s_auto_stop && s_last_movement_ms > 0) {
     int64_t now = prv_now_ms();
     if ((now - s_last_movement_ms) > 15000) {
-      prv_end_run();
+      // Auto-stop: end without confirmation since it's automatic
+      prv_update_elapsed();
+      s_state = RUN_STATE_SUMMARY;
+      prv_send_cmd(CMD_STOP);
+      prv_send_summary();
+      prv_update_layers();
+      vibes_double_pulse();
+      text_layer_set_text(s_footer_layer, "Auto-stopped");
     }
   }
   // Update heart rate once per second (if available)
@@ -486,6 +650,10 @@ static void prv_start_run(void) {
   s_lap_anchor_distance_m = 0;
   prv_send_cmd(CMD_START);
   prv_update_layers();
+  
+  // Success feedback
+  vibes_short_pulse();
+  text_layer_set_text(s_footer_layer, "Workout started!");
 }
 
 static void prv_pause_run(void) {
@@ -497,6 +665,10 @@ static void prv_pause_run(void) {
   s_pause_started_ms = prv_now_ms();
   prv_send_cmd(CMD_PAUSE);
   prv_update_layers();
+  
+  // Pause feedback - double short pulse
+  vibes_double_pulse();
+  text_layer_set_text(s_footer_layer, "Workout paused");
 }
 
 static void prv_resume_run(void) {
@@ -509,6 +681,10 @@ static void prv_resume_run(void) {
   s_state = RUN_STATE_RUNNING;
   prv_send_cmd(CMD_RESUME);
   prv_update_layers();
+  
+  // Resume feedback
+  vibes_short_pulse();
+  text_layer_set_text(s_footer_layer, "Workout resumed!");
 }
 
 static void prv_send_summary(void) {
@@ -531,20 +707,21 @@ static void prv_send_summary(void) {
   app_message_outbox_send();
 }
 
-static void prv_end_run(void) {
-  prv_update_elapsed();
-  s_state = RUN_STATE_SUMMARY;
-  prv_send_cmd(CMD_STOP);
-  prv_send_summary();
-  prv_update_layers();
-}
-
 static void prv_back_long_click_handler(ClickRecognizerRef recognizer, void *context) {
-  prv_end_run();
+  if (s_state == RUN_STATE_RUNNING || s_state == RUN_STATE_PAUSED) {
+    prv_end_run();
+  }
 }
 
 static void prv_back_single_click_handler(ClickRecognizerRef recognizer, void *context) {
-  text_layer_set_text(s_footer_layer, "Hold back to end");
+  if (s_state == RUN_STATE_SUMMARY) {
+    // Exit app from summary screen
+    window_stack_pop_all(true);
+  } else if (s_state == RUN_STATE_IDLE) {
+    text_layer_set_text(s_footer_layer, "Hold SELECT to change sport");
+  } else {
+    text_layer_set_text(s_footer_layer, "Hold back to end workout");
+  }
 }
 
 static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context) {
@@ -566,8 +743,12 @@ static void prv_select_long_click_handler(ClickRecognizerRef recognizer, void *c
 }
 
 static void prv_up_click_handler(ClickRecognizerRef recognizer, void *context) {
+  // Long press on UP navigates back a page
+  // Short press marks a lap (or shows message in swim mode)
   if (s_sport == SPORT_SWIM) {
     text_layer_set_text(s_footer_layer, "Swim laps are automatic");
+    // Brief vibration feedback
+    vibes_short_pulse();
     return;
   }
   prv_add_lap();
@@ -575,22 +756,54 @@ static void prv_up_click_handler(ClickRecognizerRef recognizer, void *context) {
 }
 
 static void prv_down_click_handler(ClickRecognizerRef recognizer, void *context) {
+  if (s_anim_state != ANIM_STATE_NONE) return;
+  
   if (s_sport == SPORT_SWIM) {
-    s_page = (s_page == PAGE_MAIN) ? PAGE_LAP : PAGE_MAIN;
-    prv_update_layers();
+    Page new_page = (s_page == PAGE_MAIN) ? PAGE_LAP : PAGE_MAIN;
+    prv_animate_page_transition(new_page, true);
+    s_page = new_page;
   } else {
-    s_page = (Page)((s_page + 1) % PAGE_COUNT);
-    prv_update_layers();
+    Page new_page = (Page)((s_page + 1) % PAGE_COUNT);
+    prv_animate_page_transition(new_page, true);
+    s_page = new_page;
   }
+  prv_update_layers();
 }
+
+// Up click now goes to previous page (reverse navigation)
+static void prv_up_page_handler(ClickRecognizerRef recognizer, void *context) {
+  if (s_anim_state != ANIM_STATE_NONE) return;
+  
+  if (s_sport == SPORT_SWIM) {
+    Page new_page = (s_page == PAGE_MAIN) ? PAGE_LAP : PAGE_MAIN;
+    prv_animate_page_transition(new_page, false);
+    s_page = new_page;
+  } else {
+    Page new_page = (s_page == 0) ? (Page)(PAGE_COUNT - 1) : (Page)(s_page - 1);
+    prv_animate_page_transition(new_page, false);
+    s_page = new_page;
+  }
+  prv_update_layers();
+}
+
+// Button timing optimized for Pebble 2 and Time 2
+// Pebble 2 has very clicky buttons, slightly longer press feels better
+#if defined(PBL_PLATFORM_DIORITE)
+  #define LONG_PRESS_MS 800
+  #define PAGE_NAV_PRESS_MS 600
+#else
+  #define LONG_PRESS_MS 700
+  #define PAGE_NAV_PRESS_MS 500
+#endif
 
 static void prv_click_config_provider(void *context) {
   window_single_click_subscribe(BUTTON_ID_SELECT, prv_select_click_handler);
-  window_long_click_subscribe(BUTTON_ID_SELECT, 700, prv_select_long_click_handler, NULL);
+  window_long_click_subscribe(BUTTON_ID_SELECT, LONG_PRESS_MS, prv_select_long_click_handler, NULL);
   window_single_click_subscribe(BUTTON_ID_UP, prv_up_click_handler);
+  window_long_click_subscribe(BUTTON_ID_UP, PAGE_NAV_PRESS_MS, prv_up_page_handler, NULL);
   window_single_click_subscribe(BUTTON_ID_DOWN, prv_down_click_handler);
   window_single_click_subscribe(BUTTON_ID_BACK, prv_back_single_click_handler);
-  window_long_click_subscribe(BUTTON_ID_BACK, 700, prv_back_long_click_handler, NULL);
+  window_long_click_subscribe(BUTTON_ID_BACK, LONG_PRESS_MS, prv_back_long_click_handler, NULL);
 }
 
 static void prv_process_fix(double lat, double lon, uint16_t accuracy_m, int32_t speed_cms) {
@@ -693,138 +906,192 @@ static void prv_outbox_sent(DictionaryIterator *iter, void *context) {
 }
 
 static void prv_draw_divider(Layer *layer, GContext *ctx) {
+#ifdef PBL_COLOR
   graphics_context_set_stroke_color(ctx, GColorDarkGray);
+#else
+  graphics_context_set_stroke_color(ctx, GColorWhite);
+#endif
+  graphics_context_set_stroke_width(ctx, 1);
   GRect b = layer_get_bounds(layer);
   graphics_draw_line(ctx, GPoint(0, 0), GPoint(b.size.w, 0));
+  
+  // Add subtle shadow effect on color platforms
+#ifdef PBL_COLOR
+  graphics_context_set_stroke_color(ctx, GColorBlack);
+  graphics_draw_line(ctx, GPoint(0, 1), GPoint(b.size.w, 1));
+#endif
 }
 
 static void prv_draw_dots(Layer *layer, GContext *ctx) {
   GRect b = layer_get_bounds(layer);
   int count = (s_sport == SPORT_SWIM) ? 2 : PAGE_COUNT;
-  int16_t spacing = 12;
-  int16_t radius = 3;
+  int16_t spacing = 14;
+  int16_t radius_active = 4;
+  int16_t radius_inactive = 3;
   int total = (count - 1) * spacing;
   int16_t start_x = (b.size.w - total) / 2;
   int16_t y = b.size.h / 2;
+  
   for (int i = 0; i < count; i++) {
     int16_t x = start_x + i * spacing;
     bool is_active = (i == s_page);
-    #ifdef PBL_COLOR
-    graphics_context_set_fill_color(ctx, is_active ? GColorWhite : GColorLightGray);
-    #else
+    int16_t radius = is_active ? radius_active : radius_inactive;
+    
+#ifdef PBL_COLOR
+    if (is_active) {
+      // Active dot with glow effect
+      graphics_context_set_fill_color(ctx, COLOR_PRIMARY);
+      graphics_fill_circle(ctx, GPoint(x, y), radius + 1);
+      graphics_context_set_fill_color(ctx, GColorWhite);
+      graphics_fill_circle(ctx, GPoint(x, y), radius);
+    } else {
+      graphics_context_set_fill_color(ctx, GColorDarkGray);
+      graphics_fill_circle(ctx, GPoint(x, y), radius);
+    }
+#else
     graphics_context_set_fill_color(ctx, is_active ? GColorWhite : GColorDarkGray);
-    #endif
     graphics_fill_circle(ctx, GPoint(x, y), radius);
+    // White border for active on B&W
+    if (is_active) {
+      graphics_context_set_stroke_color(ctx, GColorWhite);
+      graphics_draw_circle(ctx, GPoint(x, y), radius + 1);
+    }
+#endif
   }
 }
 
 static void prv_draw_bg(Layer *layer, GContext *ctx) {
   GRect b = layer_get_bounds(layer);
-  int16_t pad = PBL_IF_ROUND_ELSE(12, 4);
+  int16_t pad = PBL_IF_ROUND_ELSE(18, LAYOUT_PADDING);
   int16_t w = b.size.w - pad * 2;
 
-  // Primary card
-  GRect r1 = GRect(pad - 2, 26, w + 4, 60);
+  // Pebble Design System: Card-based layout with proper spacing
+  // Match positions with text layers
+  // Primary card - largest, contains main metric (time)
+#if defined(PBL_PLATFORM_EMERY) || defined(PBL_PLATFORM_CHALK)
+  GRect r1 = GRect(pad, LAYOUT_PRIMARY_Y, w, 58);
+  GRect r2 = GRect(pad, LAYOUT_SECONDARY_Y, w, 30);
+  GRect r3 = GRect(pad, LAYOUT_TERTIARY_Y, w, 26);
+#else
+  GRect r1 = GRect(pad, LAYOUT_PRIMARY_Y, w, 50);
+  GRect r2 = GRect(pad, LAYOUT_SECONDARY_Y, w, LAYOUT_TERTIARY_Y - LAYOUT_SECONDARY_Y - 2);
+  GRect r3 = GRect(pad, LAYOUT_TERTIARY_Y, w, 24);
+#endif
+
+#ifdef PBL_COLOR
+  // Primary card with subtle fill
+  graphics_context_set_fill_color(ctx, GColorDarkGray);
+  graphics_fill_rect(ctx, r1, CARD_RADIUS, GCornersAll);
+  graphics_context_set_stroke_color(ctx, COLOR_PRIMARY);
+  graphics_context_set_stroke_width(ctx, 2);
+  graphics_draw_round_rect(ctx, r1, CARD_RADIUS);
+
   // Secondary card
-  GRect r2 = GRect(pad - 2, 78, w + 4, 32);
-  // Tertiary pill
-  GRect r3 = GRect(pad - 2, 106, w + 4, 32);
+  graphics_context_set_fill_color(ctx, GColorDarkGray);
+  graphics_fill_rect(ctx, r2, CARD_RADIUS > 2 ? CARD_RADIUS - 1 : 2, GCornersAll);
+  graphics_context_set_stroke_color(ctx, COLOR_SECONDARY);
+  graphics_context_set_stroke_width(ctx, 1);
+  graphics_draw_round_rect(ctx, r2, CARD_RADIUS > 2 ? CARD_RADIUS - 1 : 2);
 
-  #ifdef PBL_COLOR
-  graphics_context_set_stroke_color(ctx, GColorVividCerulean);
-  #else
+  // Tertiary pill (fully rounded)
+  graphics_context_set_fill_color(ctx, GColorDarkGray);
+  graphics_fill_rect(ctx, r3, 12, GCornersAll);
+  graphics_context_set_stroke_color(ctx, COLOR_TERTIARY);
+  graphics_draw_round_rect(ctx, r3, 12);
+#else
+  // Diorite (Pebble 2) B&W: Clean outline style with good contrast
   graphics_context_set_stroke_color(ctx, GColorWhite);
-  #endif
-  graphics_draw_round_rect(ctx, r1, 6);
-
-  #ifdef PBL_COLOR
-  graphics_context_set_stroke_color(ctx, GColorChromeYellow);
-  #else
-  graphics_context_set_stroke_color(ctx, GColorWhite);
-  #endif
-  graphics_draw_round_rect(ctx, r2, 6);
-
-  #ifdef PBL_COLOR
-  graphics_context_set_stroke_color(ctx, GColorJaegerGreen);
-  #else
-  graphics_context_set_stroke_color(ctx, GColorWhite);
-  #endif
-  graphics_draw_round_rect(ctx, r3, 16);
+  graphics_context_set_stroke_width(ctx, 1);
+  graphics_draw_round_rect(ctx, r1, CARD_RADIUS);
+  graphics_draw_round_rect(ctx, r2, CARD_RADIUS > 2 ? CARD_RADIUS - 1 : 2);
+  graphics_draw_round_rect(ctx, r3, 10);
+#endif
 }
 
 static void prv_window_load(Window *window) {
   Layer *window_layer = window_get_root_layer(window);
   GRect bounds = layer_get_bounds(window_layer);
-
-  s_font_title = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
-  s_font_primary = fonts_get_system_font(FONT_KEY_BITHAM_42_BOLD);
-  s_font_secondary = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
-
-  int16_t pad = PBL_IF_ROUND_ELSE(12, 4);
+  
+  // Use platform-specific layout defines
+  int16_t pad = PBL_IF_ROUND_ELSE(18, LAYOUT_PADDING);
   int16_t w = bounds.size.w - pad * 2;
 
-  s_title_layer = text_layer_create(GRect(pad, 0, w, 22));
+  // Platform-optimized font selection
+  s_font_title = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
+  s_font_primary = fonts_get_system_font(FONT_PRIMARY);
+  s_font_secondary = fonts_get_system_font(FONT_SECONDARY);
+
+  // Status bar area with app name/state
+  s_title_layer = text_layer_create(GRect(pad, LAYOUT_TITLE_Y, w, 22));
   text_layer_set_background_color(s_title_layer, GColorClear);
-  #ifdef PBL_COLOR
-  text_layer_set_text_color(s_title_layer, GColorChromeYellow);
-  #else
-  text_layer_set_text_color(s_title_layer, GColorWhite);
-  #endif
+  text_layer_set_text_color(s_title_layer, COLOR_SECONDARY);
   text_layer_set_font(s_title_layer, s_font_title);
   text_layer_set_text_alignment(s_title_layer, PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentLeft));
   text_layer_set_text(s_title_layer, "READY");
   layer_add_child(window_layer, text_layer_get_layer(s_title_layer));
 
-  s_divider_layer = layer_create(GRect(pad, 22, w, 1));
+  // Subtle divider
+  s_divider_layer = layer_create(GRect(pad, LAYOUT_TITLE_Y + 22, w, 2));
   layer_set_update_proc(s_divider_layer, prv_draw_divider);
   layer_add_child(window_layer, s_divider_layer);
 
-  // Fun background cards
+  // Card background layer (drawn behind text)
   s_bg_layer = layer_create(bounds);
   layer_set_update_proc(s_bg_layer, prv_draw_bg);
   layer_add_child(window_layer, s_bg_layer);
 
-  s_primary_layer = text_layer_create(GRect(pad, 28, w, 56));
+  // Primary metric card - Time (largest, most important)
+  // Adjust height based on platform
+#if defined(PBL_PLATFORM_EMERY) || defined(PBL_PLATFORM_CHALK)
+  s_primary_layer = text_layer_create(GRect(pad, LAYOUT_PRIMARY_Y, w, 58));
+#else
+  s_primary_layer = text_layer_create(GRect(pad, LAYOUT_PRIMARY_Y, w, 50));
+#endif
   text_layer_set_background_color(s_primary_layer, GColorClear);
-  text_layer_set_text_color(s_primary_layer, GColorWhite);
+  text_layer_set_text_color(s_primary_layer, COLOR_TEXT_PRIMARY);
   text_layer_set_font(s_primary_layer, s_font_primary);
   text_layer_set_text_alignment(s_primary_layer, GTextAlignmentCenter);
   text_layer_set_text(s_primary_layer, "00:00");
   layer_add_child(window_layer, text_layer_get_layer(s_primary_layer));
 
-  s_secondary_layer = text_layer_create(GRect(pad, 82, w, 28));
+  // Secondary metric card - Distance
+  s_secondary_layer = text_layer_create(GRect(pad, LAYOUT_SECONDARY_Y, w, 
+    PBL_IF_ROUND_ELSE(30, (LAYOUT_TERTIARY_Y - LAYOUT_SECONDARY_Y - 2))));
   text_layer_set_background_color(s_secondary_layer, GColorClear);
-  #ifdef PBL_COLOR
-  text_layer_set_text_color(s_secondary_layer, GColorChromeYellow);
-  #else
-  text_layer_set_text_color(s_secondary_layer, GColorWhite);
-  #endif
+  text_layer_set_text_color(s_secondary_layer, COLOR_SECONDARY);
   text_layer_set_font(s_secondary_layer, s_font_secondary);
   text_layer_set_text_alignment(s_secondary_layer, GTextAlignmentCenter);
   text_layer_set_text(s_secondary_layer, "0.00 km");
   layer_add_child(window_layer, text_layer_get_layer(s_secondary_layer));
 
-  s_tertiary_layer = text_layer_create(GRect(pad, 110, w, 28));
+  // Tertiary metric card - Pace/HR
+  s_tertiary_layer = text_layer_create(GRect(pad, LAYOUT_TERTIARY_Y, w, 24));
   text_layer_set_background_color(s_tertiary_layer, GColorClear);
-  #ifdef PBL_COLOR
-  text_layer_set_text_color(s_tertiary_layer, GColorJaegerGreen);
-  #else
-  text_layer_set_text_color(s_tertiary_layer, GColorWhite);
-  #endif
-  text_layer_set_font(s_tertiary_layer, s_font_secondary);
+  text_layer_set_text_color(s_tertiary_layer, COLOR_TERTIARY);
+  text_layer_set_font(s_tertiary_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
   text_layer_set_text_alignment(s_tertiary_layer, GTextAlignmentCenter);
   text_layer_set_text(s_tertiary_layer, "--:--");
   layer_add_child(window_layer, text_layer_get_layer(s_tertiary_layer));
 
-  s_footer_layer = text_layer_create(GRect(pad, bounds.size.h - 28, w, 18));
+  // Footer area for hints/status
+#if defined(PBL_PLATFORM_EMERY) || defined(PBL_PLATFORM_CHALK)
+  s_footer_layer = text_layer_create(GRect(pad, bounds.size.h - 34, w, 22));
+#else
+  s_footer_layer = text_layer_create(GRect(pad, LAYOUT_FOOTER_Y, w, 18));
+#endif
   text_layer_set_background_color(s_footer_layer, GColorClear);
-  text_layer_set_text_color(s_footer_layer, GColorWhite);
+  text_layer_set_text_color(s_footer_layer, COLOR_TEXT_SECONDARY);
   text_layer_set_font(s_footer_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
   text_layer_set_text_alignment(s_footer_layer, GTextAlignmentLeft);
   text_layer_set_text(s_footer_layer, "Hold SELECT to change mode");
   layer_add_child(window_layer, text_layer_get_layer(s_footer_layer));
 
-  s_dots_layer = layer_create(GRect(0, bounds.size.h - 10, bounds.size.w, 10));
+  // Page indicator dots - position above footer
+#if defined(PBL_PLATFORM_EMERY) || defined(PBL_PLATFORM_CHALK)
+  s_dots_layer = layer_create(GRect(0, bounds.size.h - 16, bounds.size.w, 14));
+#else
+  s_dots_layer = layer_create(GRect(0, bounds.size.h - 14, bounds.size.w, 12));
+#endif
   layer_set_update_proc(s_dots_layer, prv_draw_dots);
   layer_add_child(window_layer, s_dots_layer);
 }
@@ -840,6 +1107,162 @@ static void prv_window_unload(Window *window) {
   layer_destroy(s_bg_layer);
 }
 
+// ==================== Confirmation Dialog ====================
+// Pebble Design System: Modal confirmation for destructive actions
+
+static void (*s_confirm_callback)(bool) = NULL;
+
+static void prv_confirm_draw_bg(Layer *layer, GContext *ctx) {
+  GRect b = layer_get_bounds(layer);
+  
+  // Platform-specific card sizing
+#if defined(PBL_PLATFORM_EMERY)
+  GRect card = GRect(16, 60, b.size.w - 32, 108);
+#elif defined(PBL_PLATFORM_CHALK)
+  GRect card = GRect(14, 50, b.size.w - 28, 96);
+#else
+  GRect card = GRect(10, 40, b.size.w - 20, 88);
+#endif
+  
+  // Semi-transparent overlay
+#ifdef PBL_COLOR
+  graphics_context_set_fill_color(ctx, GColorBlack);
+  graphics_fill_rect(ctx, b, 0, GCornerNone);
+  
+  // Modal card with accent border
+  graphics_context_set_fill_color(ctx, GColorDarkGray);
+  graphics_fill_rect(ctx, card, 8, GCornersAll);
+  graphics_context_set_stroke_color(ctx, COLOR_PRIMARY);
+  graphics_context_set_stroke_width(ctx, 2);
+  graphics_draw_round_rect(ctx, card, 8);
+#else
+  // Diorite (Pebble 2) B&W: High contrast invert style
+  graphics_context_set_fill_color(ctx, GColorWhite);
+  graphics_fill_rect(ctx, b, 0, GCornerNone);
+  graphics_context_set_fill_color(ctx, GColorBlack);
+  graphics_fill_rect(ctx, card, 4, GCornersAll);
+  graphics_context_set_stroke_color(ctx, GColorWhite);
+  graphics_context_set_stroke_width(ctx, 1);
+  graphics_draw_round_rect(ctx, card, 4);
+#endif
+}
+
+static void prv_confirm_window_load(Window *window) {
+  Layer *root = window_get_root_layer(window);
+  GRect b = layer_get_bounds(root);
+  
+  // Background overlay
+  s_confirm_bg_layer = layer_create(b);
+  layer_set_update_proc(s_confirm_bg_layer, prv_confirm_draw_bg);
+  layer_add_child(root, s_confirm_bg_layer);
+  
+  // Platform-specific positioning
+#if defined(PBL_PLATFORM_EMERY)
+  int16_t title_y = 70;
+  int16_t msg_y = 100;
+  GFont msg_font = fonts_get_system_font(FONT_KEY_GOTHIC_18);
+#elif defined(PBL_PLATFORM_CHALK)
+  int16_t title_y = 58;
+  int16_t msg_y = 86;
+  GFont msg_font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
+#else
+  int16_t title_y = 48;
+  int16_t msg_y = 72;
+  GFont msg_font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
+#endif
+  
+  // Title
+  s_confirm_title_layer = text_layer_create(GRect(16, title_y, b.size.w - 32, 26));
+  text_layer_set_background_color(s_confirm_title_layer, GColorClear);
+  text_layer_set_text_color(s_confirm_title_layer, GColorWhite);
+  text_layer_set_font(s_confirm_title_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+  text_layer_set_text_alignment(s_confirm_title_layer, GTextAlignmentCenter);
+  text_layer_set_text(s_confirm_title_layer, "End Workout?");
+  layer_add_child(root, text_layer_get_layer(s_confirm_title_layer));
+  
+  // Message
+  s_confirm_msg_layer = text_layer_create(GRect(16, msg_y, b.size.w - 32, 48));
+  text_layer_set_background_color(s_confirm_msg_layer, GColorClear);
+  text_layer_set_text_color(s_confirm_msg_layer, GColorLightGray);
+  text_layer_set_font(s_confirm_msg_layer, msg_font);
+  text_layer_set_text_alignment(s_confirm_msg_layer, GTextAlignmentCenter);
+  text_layer_set_text(s_confirm_msg_layer, "SELECT: Yes\nBACK: Cancel");
+  layer_add_child(root, text_layer_get_layer(s_confirm_msg_layer));
+  
+  s_confirm_active = true;
+}
+
+static void prv_confirm_window_unload(Window *window) {
+  text_layer_destroy(s_confirm_title_layer);
+  text_layer_destroy(s_confirm_msg_layer);
+  layer_destroy(s_confirm_bg_layer);
+  window_destroy(s_confirm_window);
+  s_confirm_window = NULL;
+  s_confirm_active = false;
+}
+
+static void prv_confirm_select_handler(ClickRecognizerRef recognizer, void *context) {
+  s_confirm_result = true;
+  window_stack_remove(s_confirm_window, true);
+  if (s_confirm_callback) {
+    s_confirm_callback(true);
+  }
+}
+
+static void prv_confirm_back_handler(ClickRecognizerRef recognizer, void *context) {
+  s_confirm_result = false;
+  window_stack_remove(s_confirm_window, true);
+  if (s_confirm_callback) {
+    s_confirm_callback(false);
+  }
+}
+
+static void prv_confirm_click_config(void *context) {
+  window_single_click_subscribe(BUTTON_ID_SELECT, prv_confirm_select_handler);
+  window_single_click_subscribe(BUTTON_ID_BACK, prv_confirm_back_handler);
+}
+
+static void prv_show_confirmation(const char *title, const char *message, void (*callback)(bool)) {
+  if (s_confirm_window) return;
+  
+  s_confirm_callback = callback;
+  s_confirm_window = window_create();
+  window_set_background_color(s_confirm_window, GColorClear);
+  window_set_click_config_provider(s_confirm_window, prv_confirm_click_config);
+  window_set_window_handlers(s_confirm_window, (WindowHandlers){
+    .load = prv_confirm_window_load,
+    .unload = prv_confirm_window_unload,
+  });
+  
+  // Store title/message for use in load
+  // For simplicity, using static strings - in production would copy to buffers
+  
+  // Animated push for smooth transition
+  window_stack_push(s_confirm_window, true);
+}
+
+// ==================== End Workout Confirmation ====================
+
+static void prv_end_run(void) {
+  prv_update_elapsed();
+  
+  // Show confirmation dialog instead of immediate stop
+  prv_show_confirmation("End Workout?", "Your progress will be saved.", prv_end_run_confirmed);
+}
+
+static void prv_end_run_confirmed(bool confirmed) {
+  if (!confirmed) {
+    text_layer_set_text(s_footer_layer, "Workout continues");
+    return;
+  }
+  
+  s_state = RUN_STATE_SUMMARY;
+  prv_send_cmd(CMD_STOP);
+  prv_send_summary();
+  prv_update_layers();
+  vibes_double_pulse(); // Success feedback
+}
+
 // Sport selection menu
 static uint16_t prv_menu_get_num_sections(MenuLayer *menu_layer, void *context) {
   return 1;
@@ -850,7 +1273,14 @@ static uint16_t prv_menu_get_num_rows(MenuLayer *menu_layer, uint16_t section_in
 }
 
 static int16_t prv_menu_get_cell_height(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
-  return 44; // default basic cell height
+  // Larger cells on Emery for easier touch targeting
+#if defined(PBL_PLATFORM_EMERY)
+  return 56;
+#elif defined(PBL_PLATFORM_CHALK)
+  return 52;
+#else
+  return 44; // default for Diorite and others
+#endif
 }
 
 static void prv_menu_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *context) {
@@ -867,16 +1297,30 @@ static void prv_menu_select(MenuLayer *menu_layer, MenuIndex *cell_index, void *
   }
   prv_reset_thresholds();
   prv_update_layers();
+  
+  // Animated removal for smooth transition
   window_stack_remove(s_sport_window, true);
   s_sport_window = NULL;
+  
+  // Haptic feedback on selection
+  vibes_short_pulse();
 }
 
 static void prv_sport_window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   GRect b = layer_get_bounds(root);
+  
+  // Pebble Design System menu styling
   s_menu_layer = menu_layer_create(b);
+  
+#ifdef PBL_COLOR
+  menu_layer_set_normal_colors(s_menu_layer, GColorDarkGray, GColorWhite);
+  menu_layer_set_highlight_colors(s_menu_layer, COLOR_PRIMARY, GColorWhite);
+#else
   menu_layer_set_normal_colors(s_menu_layer, GColorWhite, GColorBlack);
   menu_layer_set_highlight_colors(s_menu_layer, GColorBlack, GColorWhite);
+#endif
+  
   MenuLayerCallbacks cbs = {
     .get_num_sections = prv_menu_get_num_sections,
     .get_num_rows = prv_menu_get_num_rows,
@@ -896,27 +1340,59 @@ static void prv_sport_window_unload(Window *window) {
 static void prv_show_sport_selector(void) {
   if (s_sport_window) return;
   s_sport_window = window_create();
+  
+#ifdef PBL_COLOR
+  window_set_background_color(s_sport_window, GColorDarkGray);
+#else
   window_set_background_color(s_sport_window, GColorWhite);
+#endif
+  
   window_set_window_handlers(s_sport_window, (WindowHandlers){
     .load = prv_sport_window_load,
     .unload = prv_sport_window_unload,
   });
+  
+  // Animated push for smooth transition
   window_stack_push(s_sport_window, true);
 }
 
 static void prv_init(void) {
   prv_reset_session();
+  
+  // Platform detection for optimized layout
+  // Pebble 2 (Diorite): 144x168, B&W, HR sensor, clicky buttons
+  // Time 2 (Emery): 200x228, Color, HR sensor, larger screen
+#if defined(PBL_PLATFORM_DIORITE)
+  const char *platform_name = "Pebble 2";
+#elif defined(PBL_PLATFORM_EMERY)
+  const char *platform_name = "Time 2";
+#elif defined(PBL_PLATFORM_CHALK)
+  const char *platform_name = "Time Round";
+#elif defined(PBL_PLATFORM_BASALT)
+  const char *platform_name = "Time";
+#else
+  const char *platform_name = "Pebble";
+#endif
+  
+  // Pebble Design System: Dark background for color, black for B&W
+#ifdef PBL_COLOR
+  GColor bg_color = GColorBlack;
+#else
+  GColor bg_color = GColorBlack;
+#endif
 
   s_window = window_create();
-  window_set_background_color(s_window, GColorBlack);
+  window_set_background_color(s_window, bg_color);
   window_set_click_config_provider(s_window, prv_click_config_provider);
   window_set_window_handlers(s_window, (WindowHandlers){
     .load = prv_window_load,
     .unload = prv_window_unload,
   });
+  
+  // Push main window with animation
   window_stack_push(s_window, true);
 
-  // Prompt sport selection on startup
+  // Prompt sport selection on startup (animated)
   prv_show_sport_selector();
 
   app_message_register_inbox_received(prv_inbox_received);
@@ -926,6 +1402,20 @@ static void prv_init(void) {
   app_message_open(512, 512);
 
   tick_timer_service_subscribe(SECOND_UNIT, prv_tick_handler);
+  
+  // Startup feedback - platform-specific pattern
+#if defined(PBL_PLATFORM_EMERY)
+  // Time 2: Double pulse for color HR watch
+  vibes_double_pulse();
+#elif defined(PBL_PLATFORM_DIORITE)
+  // Pebble 2: Single short pulse for B&W HR watch
+  vibes_short_pulse();
+#else
+  vibes_short_pulse();
+#endif
+  
+  // Store platform name for display
+  snprintf(s_buf_footer, sizeof(s_buf_footer), "%s ready", platform_name);
 }
 
 static void prv_deinit(void) {
